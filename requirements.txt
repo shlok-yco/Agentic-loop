@@ -1,0 +1,56 @@
+# ── CORE DATA MANIPULATION ──────────────────────────────────
+pandas==2.2.2               # Primary DataFrame engine — all transforms, joins, reshaping
+numpy==1.26.4               # Vectorized numerical ops, null fills, outlier clipping
+pyarrow==16.1.0             # Columnar I/O: .parquet / .feather read-write + strict typing
+dask[complete]==2024.5.0    # Out-of-memory / distributed DataFrames (>1M rows)
+
+
+# ── INGESTION & FILE HANDLING ────────────────────────────────
+openpyxl==3.1.2             # Excel .xlsx read/write (pandas engine)
+xlrd==2.0.1                 # Legacy Excel .xls read support (pandas engine)
+orjson==3.10.3              # Fast JSON parsing for nested / semi-structured sources
+requests==2.32.3            # HTTP data fetch from REST APIs
+httpx==0.27.0               # Async HTTP fetch — preferred for concurrent API ingestion
+SQLAlchemy==2.0.30          # DB connection layer: read from relational DBs into DataFrames
+fastparquet==2024.2.0       # Alternative parquet engine (use when pyarrow unavailable)
+
+
+# ── VALIDATION & SCHEMA CONTRACTS ───────────────────────────
+pandera==0.20.3             # DataFrame schema validation: dtypes, ranges, nullability
+pydantic==2.7.4             # Output object contracts — structures the Supervisor handoff JSON
+great-expectations==0.18.19 # Full DQ checkpoint suites for SLA-critical pipelines
+
+
+# ── CLEANING & FEATURE ENGINEERING SUPPORT ──────────────────
+scikit-learn==1.5.0         # SimpleImputer: mean / median / most-frequent null strategies
+python-dateutil==2.9.0.post0 # Flexible date parsing for mixed / ambiguous datetime formats
+
+
+# ── PROFILING & DIAGNOSTICS ─────────────────────────────────
+ydata-profiling==4.8.3      # Full EDA profile HTML report — first-pass audit of unknown datasets
+missingno==0.5.2            # Missing value matrix / heatmap — reveals missingness patterns
+
+
+# ── SUPPLEMENTARY / OPTIONAL ────────────────────────────────
+# Uncomment as needed based on pipeline source types.
+
+# lxml==5.2.2               # XML / HTML source parsing (pd.read_html dependency)
+# boto3==1.34.120           # AWS S3 data ingestion / export
+# google-cloud-bigquery==3.21.0  # GCP BigQuery source ingestion
+# psycopg2-binary==2.9.9    # PostgreSQL direct connection via SQLAlchemy
+# pymysql==1.1.1            # MySQL direct connection via SQLAlchemy
+# pyodbc==5.1.0             # ODBC driver (MSSQL / generic warehouse connections)
+# connectorx==0.3.3         # High-performance DB → DataFrame connector (faster than SQLAlchemy)
+# delta-spark==3.1.0        # Delta Lake table I/O (Spark-based pipelines)
+
+
+# ── DEVELOPMENT & TESTING (non-production) ──────────────────
+# Uncomment for local dev / CI environments only.
+
+# pytest==8.2.2             # Unit testing pipeline scripts
+# pytest-cov==5.0.0         # Test coverage reporting
+# ipython==8.25.0           # Interactive REPL for exploratory script development
+# jupyter==1.0.0            # Notebook environment for pipeline prototyping
+# black==24.4.2             # Code formatting
+# ruff==0.4.7               # Fast linting (replaces flake8 + isort)
+# mypy==1.10.0              # Static type checking for Pydantic models + typed scripts
