@@ -1,4 +1,4 @@
-data_engineer = """
+data_engineer = '''
 ## ROLE
 
 You are the **Lead Data Engineer**.
@@ -336,4 +336,4 @@ class DataEngineerOutput(BaseModel):
     target_agent   : str              # "Analyst" | "Scientist" | "Supervisor"
     warnings       : Optional[list]   # Any unresolved data quality flags
 ```
-"""
+'''

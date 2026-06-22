@@ -30,6 +30,11 @@ python-dateutil==2.9.0.post0 # Flexible date parsing for mixed / ambiguous datet
 ydata-profiling==4.8.3      # Full EDA profile HTML report — first-pass audit of unknown datasets
 missingno==0.5.2            # Missing value matrix / heatmap — reveals missingness patterns
 
+# ── LANGGRAPH & LLM PIPELINE ───────────────────────────────
+langgraph==0.1.58           # LangGraph state management & execution
+pydantic-settings==2.14.2   # Settings / env-var management (config.py)
+python-dotenv==1.2.2        # .env file parsing for local development
+
 
 # ── SUPPLEMENTARY / OPTIONAL ────────────────────────────────
 # Uncomment as needed based on pipeline source types.
