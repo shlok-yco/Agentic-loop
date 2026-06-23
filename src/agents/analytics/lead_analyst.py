@@ -7,15 +7,20 @@ Performs EDA, insight extraction, and ECharts visualisation generation.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
+from langchain_core.messages import ToolMessage
+
 from src.agents.analytics.tools import ANALYTICS_TOOLS
 from config import settings
 from src.graph.state import BIState
+
+logger = logging.getLogger(__name__)
 
 
 # ── System prompt ─────────────────────────────────────────────────────────────
@@ -75,12 +80,47 @@ _llm = ChatOpenAI(
     api_key=settings.openai_api_key_str,
 )
 
+# ── Message trimming hook ─────────────────────────────────────────────────────
+
+_MAX_TOOL_OUTPUT_CHARS = 8_000  # truncate tool outputs longer than this
+
+
+def _trim_messages(state: dict) -> dict:
+    """
+    pre_model_hook: truncate oversized tool-output messages so the
+    analyst's ReAct loop does not exceed the LLM context window.
+
+    Only ToolMessage content is touched; user and assistant messages
+    are left intact.
+    """
+    messages = state.get("messages", [])
+    trimmed = []
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and isinstance(msg.content, str):
+            if len(msg.content) > _MAX_TOOL_OUTPUT_CHARS:
+                truncated = msg.content[:_MAX_TOOL_OUTPUT_CHARS]
+                truncated += (
+                    f"\n\n... [TRUNCATED — original was {len(msg.content):,} chars. "
+                    "Use the data file directly for full details.]"
+                )
+                msg = msg.model_copy(update={"content": truncated})
+                logger.debug(
+                    "Trimmed ToolMessage %s from %d to %d chars",
+                    msg.tool_call_id,
+                    len(msg.content),
+                    _MAX_TOOL_OUTPUT_CHARS,
+                )
+        trimmed.append(msg)
+    return {"messages": trimmed}
+
+
 # ── ReAct agent ───────────────────────────────────────────────────────────────
 
 _agent = create_react_agent(
     model=_llm,
     tools=ANALYTICS_TOOLS,
     prompt=SystemMessage(content=_ANALYST_PROMPT),
+    pre_model_hook=_trim_messages,
 )
 
 

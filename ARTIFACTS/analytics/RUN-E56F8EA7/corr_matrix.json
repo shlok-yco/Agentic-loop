@@ -1,0 +1,122 @@
+{
+  "transactions": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "customers": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "units": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "revenue_net": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "revenue_gross": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "discount_amount": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "profit": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  },
+  "avg_order_value": {
+    "transactions": -1.0,
+    "customers": -1.0,
+    "units": -1.0,
+    "revenue_net": -1.0,
+    "revenue_gross": -1.0,
+    "discount_amount": -1.0,
+    "profit": -1.0,
+    "avg_order_value": 1.0,
+    "promo_txn_share": 1.0,
+    "profit_margin": -1.0
+  },
+  "promo_txn_share": {
+    "transactions": -1.0,
+    "customers": -1.0,
+    "units": -1.0,
+    "revenue_net": -1.0,
+    "revenue_gross": -1.0,
+    "discount_amount": -1.0,
+    "profit": -1.0,
+    "avg_order_value": 1.0,
+    "promo_txn_share": 1.0,
+    "profit_margin": -1.0
+  },
+  "profit_margin": {
+    "transactions": 1.0,
+    "customers": 1.0,
+    "units": 1.0,
+    "revenue_net": 1.0,
+    "revenue_gross": 1.0,
+    "discount_amount": 1.0,
+    "profit": 1.0,
+    "avg_order_value": -1.0,
+    "promo_txn_share": -1.0,
+    "profit_margin": 1.0
+  }
+}

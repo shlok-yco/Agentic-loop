@@ -1,0 +1,35 @@
+{
+  "title": {
+    "text": "Transactions by Channel",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "xAxis": {
+    "type": "category",
+    "data": [
+      "in_store",
+      "online"
+    ],
+    "axisLabel": {
+      "rotate": 30
+    }
+  },
+  "yAxis": {
+    "type": "value"
+  },
+  "series": [
+    {
+      "type": "bar",
+      "data": [
+        11983,
+        18026
+      ],
+      "name": "transactions"
+    }
+  ],
+  "grid": {
+    "containLabel": true
+  }
+}

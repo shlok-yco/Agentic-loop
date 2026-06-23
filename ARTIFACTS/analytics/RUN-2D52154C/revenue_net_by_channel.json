@@ -1,0 +1,35 @@
+{
+  "title": {
+    "text": "Revenue by Channel (Net Revenue)",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "xAxis": {
+    "type": "category",
+    "data": [
+      "in_store",
+      "online"
+    ],
+    "axisLabel": {
+      "rotate": 30
+    }
+  },
+  "yAxis": {
+    "type": "value"
+  },
+  "series": [
+    {
+      "type": "bar",
+      "data": [
+        5467229.02,
+        7849866.04
+      ],
+      "name": "revenue_net"
+    }
+  ],
+  "grid": {
+    "containLabel": true
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "title": {
+    "text": "Profit vs Acquisition (Customers) by Channel",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "item"
+  },
+  "xAxis": {
+    "name": "customers",
+    "type": "value"
+  },
+  "yAxis": {
+    "name": "profit",
+    "type": "value"
+  },
+  "series": [
+    {
+      "name": "in_store",
+      "type": "scatter",
+      "data": [
+        [
+          3957.0,
+          1644368.05
+        ]
+      ]
+    },
+    {
+      "name": "online",
+      "type": "scatter",
+      "data": [
+        [
+          4278.0,
+          2376709.27
+        ]
+      ]
+    }
+  ]
+}

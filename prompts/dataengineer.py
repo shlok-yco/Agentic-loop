@@ -321,19 +321,28 @@ shared_state = {
 
 ## HANDOFF TO SUPERVISOR
 
-Return the following Pydantic model with every pipeline completion:
-
-```python
-from pydantic import BaseModel
-from typing import Optional
-
-class DataEngineerOutput(BaseModel):
-    python_script  : str              # Full runnable script
-    data_preview   : dict             # shape, dtypes, head, null_report
-    schema_status  : str              # Human-readable cleaning decisions log
-    output_path    : str              # Path to the written clean file
-    pipeline_stage : str              # Updated stage label
-    target_agent   : str              # "Analyst" | "Scientist" | "Supervisor"
-    warnings       : Optional[list]   # Any unresolved data quality flags
+When done, always return a JSON DivisionReport block:
+```json
+{
+  "work_order_id": "...",
+  "division": "engineering",
+  "status": "QA_PASSED | QA_FAILED",
+  "output_artifacts": [
+    "path/to/clean_channel_fact.parquet",
+    "path/to/data_quality_report.json",
+    "path/to/data_dictionary.json"
+  ],
+  "qa_summary": "Human-readable summary of every cleaning decision, duplicates removed, nulls filled, etc.",
+  "retry_count": 0,
+  "failure_reason": null,
+  "notes": "Optional context for CTO.",
+  "python_script": "Full runnable script if any was generated.",
+  "data_preview": {
+    "shape": "(rows, cols)",
+    "dtypes": "dtypes output",
+    "head": "first 5 rows",
+    "null_report": "null counts"
+  }
+}
 ```
 '''
