@@ -1,73 +1,37 @@
-"""
-src/agents/engineering/tools.py
-Tools available to the Lead Data Engineer ReAct agent.
-
-Each function is wrapped with @tool so LangChain can bind it.
-"""
-
-from __future__ import annotations
-
 import json
-import re
-import warnings
-from pathlib import Path
-from typing import Any
-
-import numpy as np
 import pandas as pd
+from pathlib import Path
 from langchain_core.tools import tool
 
-warnings.filterwarnings("ignore")
+from .utils import _read, profile_dataset, CleanData
 
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _read(path: str) -> pd.DataFrame:
-    p = Path(path)
-    if p.suffix == ".parquet":
-        return pd.read_parquet(p)
-    if p.suffix in (".xls", ".xlsx"):
-        return pd.read_excel(p)
-    if p.suffix == ".json":
-        return pd.read_json(p)
-    return pd.read_csv(p)
-
-
-def _write_parquet(df: pd.DataFrame, path: str) -> str:
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out, index=False)
-    return str(out)
-
-
-# ── tools ────────────────────────────────────────────────────────────────────
+clean_data = CleanData()
 
 
 @tool
-def ingest_file(file_path: str) -> str:
+def ingest_dataset(file_path: str):
     """
-    Ingest a CSV / Parquet / Excel / JSON file and return a JSON summary
-    containing shape, column names, dtypes, and the first 5 rows.
-
-    Args:
-        file_path: Absolute or relative path to the source file.
+    This is tool for the file/ data ingestion function to load or read the data
     """
-    df = _read(file_path)
-    return json.dumps(
-        {
-            "shape": list(df.shape),
-            "columns": list(df.columns),
-            "dtypes": df.dtypes.astype(str).to_dict(),
-            "head": df.head(5).to_dict(orient="records"),
-            "null_counts": df.isnull().sum().to_dict(),
-            "duplicate_rows": int(df.duplicated().sum()),
-        },
-        default=str,
-    )
+    try:
+        df = _read(file_path)
+        return json.dumps(
+            {
+                "shape": list(df.shape),
+                "columns": list(df.columns),
+                "dtypes": df.dtypes.astype(str).to_dict(),
+                "head": df.head(5).to_dict(orient="records"),
+                "null_counts": df.isnull().sum().to_dict(),
+                "duplicate_rows": int(df.duplicated().sum()),
+            },
+            default=str,
+        )
+    except Exception as e:
+        return str(e)
 
 
 @tool
-def profile_dataframe(file_path: str) -> str:
+def profile_dataset(file_path: str):
     """
     Run a lightweight profiling pass on a file and return per-column statistics
     (dtype, null %, unique count, min/max/mean for numeric columns).
@@ -75,30 +39,15 @@ def profile_dataframe(file_path: str) -> str:
     Args:
         file_path: Path to the data file.
     """
-    df = _read(file_path)
-    profile: dict[str, Any] = {}
-    for col in df.columns:
-        s = df[col]
-        entry: dict[str, Any] = {
-            "dtype": str(s.dtype),
-            "null_pct": round(s.isnull().mean() * 100, 2),
-            "unique": int(s.nunique(dropna=True)),
-        }
-        if pd.api.types.is_numeric_dtype(s):
-            entry.update(
-                {
-                    "min": float(s.min()) if not s.empty else None,
-                    "max": float(s.max()) if not s.empty else None,
-                    "mean": round(float(s.mean()), 4) if not s.empty else None,
-                    "std": round(float(s.std()), 4) if not s.empty else None,
-                }
-            )
-        profile[col] = entry
-    return json.dumps(profile, default=str)
+    try:
+        df = _read(file_path)
+        return profile_dataset(df)
+    except Exception as e:
+        return str(e)
 
 
 @tool
-def clean_dataframe(
+def clean_dataset(
     file_path: str,
     output_path: str,
     drop_duplicates: bool = True,
@@ -106,78 +55,53 @@ def clean_dataframe(
     fill_numeric_strategy: str = "median",
     fill_categorical_strategy: str = "unknown",
     drop_null_threshold: float = 0.9,
-) -> str:
+):
     """
     Apply standard cleaning steps to a dataframe and write a parquet output.
 
-    Steps: column normalisation → drop high-null cols → duplicate removal →
-    numeric null-fill → categorical null-fill → dtype coercion where safe.
+        Steps: column normalisation → drop high-null cols → duplicate removal →
+        numeric null-fill → categorical null-fill → dtype coercion where safe.
 
-    Args:
-        file_path: Input data path.
-        output_path: Where to write the cleaned parquet.
-        drop_duplicates: Whether to remove exact duplicate rows.
-        normalize_columns: Lowercase + underscore column names.
-        fill_numeric_strategy: 'median' | 'mean' | 'zero'.
-        fill_categorical_strategy: Fill string with this value.
-        drop_null_threshold: Drop columns with null fraction > this value (0–1).
+        Args:
+            file_path: Input data path.
+            output_path: Where to write the cleaned parquet.
+            drop_duplicates: Whether to remove exact duplicate rows.
+            normalize_columns: Lowercase + underscore column names.
+            fill_numeric_strategy: 'median' | 'mean' | 'zero'.
+            fill_categorical_strategy: Fill string with this value.
+            drop_null_threshold: Drop columns with null fraction > this value (0–1).
 
-    Returns:
-        JSON with output_path, shape_before, shape_after, cleaning_log.
+        Returns:
+            JSON with output_path, shape_before, shape_after, cleaning_log.
     """
     df = _read(file_path)
-    log: list[str] = []
+    log = []
     shape_before = list(df.shape)
+    # 1. Normalise columns
+    clean_data._normalize_columns(df, normalize_columns)
+    log.append(f"Normalized columns: {normalize_columns}")
 
-    # Column normalisation
-    if normalize_columns:
-        df.columns = (
-            df.columns.str.strip()
-            .str.lower()
-            .str.replace(r"[\s\-\.]+", "_", regex=True)
-            .str.replace(r"[^\w]", "", regex=True)
-        )
-        log.append("Column names normalised.")
+    # 2. drop high-null cols
+    clean_data._drop_null_cols(df, drop_null_threshold)
+    log.append(f"Dropped high-null columns with threshold: {drop_null_threshold}")
 
-    # Drop high-null columns
-    null_fracs = df.isnull().mean()
-    high_null = null_fracs[null_fracs > drop_null_threshold].index.tolist()
-    if high_null:
-        df.drop(columns=high_null, inplace=True)
-        log.append(f"Dropped high-null columns (>{drop_null_threshold*100:.0f}%): {high_null}")
+    # 3. Duplicates
+    clean_data._drop_duplicates(df, drop_duplicates)
+    log.append(f"Dropped duplicates: {drop_duplicates}")
 
-    # Duplicates
-    if drop_duplicates:
-        before = len(df)
-        df.drop_duplicates(inplace=True)
-        removed = before - len(df)
-        if removed:
-            log.append(f"Removed {removed} duplicate rows.")
+    # 4. Numeric null-fill and Categorical null-fill
+    clean_data._fill_nulls(df, fill_numeric_strategy, fill_categorical_strategy)
+    log.append(
+        f"Filled nulls with strategy: {fill_numeric_strategy} for numeric and {fill_categorical_strategy} for categorical"
+    )
 
-    # Numeric null-fill
-    num_cols = df.select_dtypes(include="number").columns.tolist()
-    for col in num_cols:
-        if df[col].isnull().any():
-            if fill_numeric_strategy == "median":
-                val = df[col].median()
-            elif fill_numeric_strategy == "mean":
-                val = df[col].mean()
-            else:
-                val = 0
-            df[col].fillna(val, inplace=True)
-            log.append(f"Filled '{col}' nulls with {fill_numeric_strategy}={round(val, 4)}.")
+    # 5. Dtype coercion
+    df.to_parquet(output_path, index=False)
+    log.append(f"Saved cleaned data to: {output_path}")
 
-    # Categorical null-fill
-    cat_cols = df.select_dtypes(exclude="number").columns.tolist()
-    for col in cat_cols:
-        if df[col].isnull().any():
-            df[col].fillna(fill_categorical_strategy, inplace=True)
-            log.append(f"Filled '{col}' nulls with '{fill_categorical_strategy}'.")
-
-    out = _write_parquet(df, output_path)
     return json.dumps(
         {
-            "output_path": out,
+            "output_path": output_path,
             "shape_before": shape_before,
             "shape_after": list(df.shape),
             "cleaning_log": log,
@@ -226,40 +150,6 @@ def validate_schema(
 
 
 @tool
-def detect_pii_columns(file_path: str) -> str:
-    """
-    Heuristically detect columns that may contain PII (email, phone, SSN, name).
-
-    Args:
-        file_path: Path to the data file.
-
-    Returns:
-        JSON list of suspected PII column names with detection reason.
-    """
-    df = _read(file_path)
-    pii_patterns = {
-        "email": re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
-        "phone": re.compile(r"\+?\d[\d\s\-().]{7,}\d"),
-        "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    }
-    name_hints = ["name", "firstname", "lastname", "fullname", "customer_name"]
-    results: dict[str, str] = {}
-
-    for col in df.select_dtypes(include="object").columns:
-        col_lower = col.lower().replace(" ", "_")
-        if any(hint in col_lower for hint in name_hints):
-            results[col] = "name_keyword_match"
-            continue
-        sample = df[col].dropna().astype(str).head(100)
-        for pii_type, pattern in pii_patterns.items():
-            if sample.str.contains(pattern, regex=True).any():
-                results[col] = pii_type
-                break
-
-    return json.dumps({"pii_columns": results})
-
-
-@tool
 def export_data_summary(file_path: str, output_json_path: str) -> str:
     """
     Export a full data quality summary (shape, dtypes, null counts, sample rows)
@@ -286,12 +176,11 @@ def export_data_summary(file_path: str, output_json_path: str) -> str:
     return json.dumps({"status": "ok", "output_path": str(out)})
 
 
-# Registry — used by the agent builder
+# tool registry
 ENGINEERING_TOOLS = [
-    ingest_file,
-    profile_dataframe,
-    clean_dataframe,
+    ingest_dataset,
+    profile_dataset,
+    clean_dataset,
     validate_schema,
-    detect_pii_columns,
     export_data_summary,
 ]
