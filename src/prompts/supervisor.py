@@ -510,7 +510,10 @@ Requirements:
 - Select chart type based on communication effectiveness.
 - Justify selection.
 - Map visual encodings.
-- Generate renderable ECharts options. Do NOT hardcode `$` or `toLocaleString()` in `valueFormatter` or `formatter` unless the data is specifically in USD. Format values dynamically based on the actual metric unit.
+- ECharts Formatting RULES: 
+  1. DO NOT use Javascript function strings (e.g., "formatter": "function(value){...}") anywhere in the JSON options. JSON does not support Javascript functions, and the frontend will render the raw code string on the chart!
+  2. Use standard ECharts template strings instead. For example: "formatter": "${value}" or "formatter": "{c}".
+  3. Do NOT hardcode `$` unless the data is specifically in USD. Format values dynamically based on actual metric unit.
 - Recommend dashboard ordering.
 
 Required Output:

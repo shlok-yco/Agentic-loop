@@ -383,7 +383,10 @@ Requirements:
 * Complete
 * Consistent with data semantics
 * Consistent with insight narrative
-* Dynamic Formatting: DO NOT hardcode '$' or `value.toLocaleString()` in the tooltip `valueFormatter` or axis `formatter` unless the metric is explicitly currency/USD. Handle formatters dynamically according to the data's actual unit.
+* ECharts Formatting RULES:
+  1. DO NOT use Javascript function strings (e.g., "formatter": "function(value){...}") anywhere in the JSON options (e.g. tooltip, axisLabel, label). The frontend renders the raw string.
+  2. Use standard ECharts template strings instead. For example: "formatter": "${value}" or "formatter": "{c}".
+  3. Do NOT hardcode '$' unless the metric is explicitly currency/USD. Handle units dynamically.
 
 Do not generate placeholder configurations.
 

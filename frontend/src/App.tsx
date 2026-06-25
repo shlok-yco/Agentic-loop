@@ -34,8 +34,7 @@ interface ChatRun {
 }
 
 function ChartGroup({ opt }: { opt: any }) {
-  const [variationIndex, React_useState] = React.useState(0);
-  const setVariationIndex = React_useState;
+  const [variationIndex, setVariationIndex] = useState(0);
 
   const variations = opt.variations || [opt];
   const currentVariation = variations[variationIndex];
@@ -59,7 +58,7 @@ function ChartGroup({ opt }: { opt: any }) {
       </div>
       <div className="p-4">
         <div className="h-80 md:h-96 w-full mb-4">
-          <ReactECharts option={echartsOption} style={{ height: '100%', width: '100%' }} />
+          <ReactECharts option={echartsOption} notMerge={true} style={{ height: '100%', width: '100%' }} />
         </div>
         <div className="px-2 text-sm text-gray-800 space-y-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
           {currentVariation.chart_type && (
