@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
 
     api_host: str = Field(default="0.0.0.0", description="Bind address for Uvicorn.")
-    api_port: int = Field(default=8000, ge=1024, le=65535)
+    api_port: int = Field(default=5000, ge=1024, le=65535)
     api_reload: bool = Field(default=False, description="Hot-reload (dev only).")
     api_workers: int = Field(default=1, ge=1, description="Uvicorn worker count.")
 

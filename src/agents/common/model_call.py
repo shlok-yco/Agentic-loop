@@ -1,4 +1,4 @@
-from langchian_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 
@@ -14,4 +14,9 @@ class LLMService:
         response = self.model.invoke(messages)
 
         # 3. Return formatted state update
-        return {"messages": [response]}
+        return response
+
+    def generate_script(self, prompt, model_name="gpt-4o-mini"):
+        coding_llm = ChatOpenAI(model=model_name)
+        response = coding_llm.invoke(prompt)
+        return response

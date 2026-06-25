@@ -18,7 +18,7 @@ import uvicorn
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from schemas.models import RunRequest, RunResponse
@@ -70,24 +70,45 @@ async def upload_file(file: UploadFile = File(...)):
     return {"file_path": str(dest.resolve()), "filename": file.filename}
 
 
+from langchain_core.messages import HumanMessage
+
 @app.post("/run", response_model=RunResponse, tags=["pipeline"])
-def run_pipeline(request: RunRequest) -> RunResponse:
+def run_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> RunResponse:
     """
-    Trigger a full agentic pipeline run.
-
-    The graph runs to completion (or HITL pause) and returns the final state
-    including any generated ECharts option JSONs under `echarts_options`.
+    Trigger a full agentic pipeline run in the background.
     """
-    run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
+    run_id = getattr(request, "run_id", None) or f"RUN-{uuid.uuid4().hex[:8].upper()}"
 
-    initial_state: BIState = {
+    # Setup workspace
+    workspace_dir = Path("workspace") / run_id
+    input_dir = workspace_dir / "input"
+    output_dir = workspace_dir / "output"
+    scripts_dir = workspace_dir / "scripts"
+    
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Move uploaded data
+    old_data_path = Path(request.data_path)
+    new_data_path = input_dir / old_data_path.name
+    
+    if old_data_path.exists():
+        import shutil
+        shutil.copy(old_data_path, new_data_path)
+
+    initial_state = {
         "run_id": run_id,
         "user_query": request.user_query,
+        "messages": [HumanMessage(content=request.user_query)],
         "intent_class": "",
         "pipeline_stage": "INIT",
         "active_division": None,
         "current_work_order_id": None,
-        "artifact_paths": {"input": request.data_path},
+        "input_artifacts": {"dataset": str(new_data_path.resolve())},
+        "output_artifacts": {},
+        "output_dir": str(output_dir.resolve()),
+        "scripts_dir": str(scripts_dir.resolve()),
         "work_orders": {},
         "qa_retry_counts": {"engineering": 0, "analytics": 0, "science": 0},
         "checkpoints": {},
@@ -100,47 +121,31 @@ def run_pipeline(request: RunRequest) -> RunResponse:
         "recursion_limit": settings.langgraph_recursion_limit,
     }
 
-    try:
-        final_state: dict[str, Any] = app_graph.invoke(initial_state, config=config)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    async def background_job():
+        try:
+            print("--- Starting background job for run_id:", run_id, "---")
+            await app_graph.ainvoke(initial_state, config=config)
+            print("--- Background job completed successfully ---")
+        except Exception as e:
+            import traceback
+            print(f"--- Background job failed: {e} ---")
+            traceback.print_exc()
 
-    # Extract ECharts options stored by the analyst/scientist nodes
-    artifact_paths: dict[str, str] = final_state.get("artifact_paths", {})
-    echarts_options: dict[str, Any] = {}
-    for key, val in artifact_paths.items():
-        if key.startswith("echarts_"):
-            try:
-                echarts_options[key.removeprefix("echarts_")] = json.loads(val)
-            except (json.JSONDecodeError, TypeError):
-                echarts_options[key.removeprefix("echarts_")] = val
-
-    # Pull insights from the last analytics log entry
-    insights: list[str] = []
-    for entry in reversed(final_state.get("project_log", [])):
-        if (
-            entry.get("division") == "analytics"
-            and entry.get("event_type") == "QA_PASSED"
-        ):
-            insights = entry.get("insights", [])
-            break
+    background_tasks.add_task(background_job)
 
     return RunResponse(
         run_id=run_id,
-        pipeline_stage=final_state.get("pipeline_stage", "UNKNOWN"),
-        active_division=final_state.get("active_division"),
-        intent_class=final_state.get("intent_class"),
-        artifact_paths={
-            k: v for k, v in artifact_paths.items() if not k.startswith("echarts_")
-        },
-        echarts_options=echarts_options,
-        insights=insights,
-        user_message=final_state.get(
-            "error_state"
-        ),  # CTO user-facing message on HITL/clarification
+        pipeline_stage="INIT",
+        active_division=None,
+        intent_class=None,
+        artifact_paths={},
+        echarts_options={},
+        insights=[],
+        user_message=None,
         error=None,
-        project_log=final_state.get("project_log", []),
+        project_log=[],
     )
+
 
 
 @app.get("/status/{run_id}", tags=["pipeline"])
@@ -152,20 +157,93 @@ def get_run_status(run_id: str):
         if snapshot is None:
             raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
         state = snapshot.values
+        supervisor_logs = state.get("project_log") or []
+        live_logs = []
+        live_logs_path = Path(f"workspace/{run_id}/live_logs.json")
+        if live_logs_path.exists():
+            try:
+                live_logs = json.loads(live_logs_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        
+        project_log = supervisor_logs + live_logs
+
         return {
             "run_id": run_id,
-            "pipeline_stage": state.get("pipeline_stage"),
+            "pipeline_stage": state.get("current_step"),
             "active_division": state.get("active_division"),
             "qa_retry_counts": state.get("qa_retry_counts"),
-            "artifact_keys": list(state.get("artifact_paths", {}).keys()),
-            "log_entries": len(state.get("project_log", [])),
-            "project_log": state.get("project_log", []),
+            "artifact_paths": state.get("output_artifacts") or {},
+            "log_entries": len(project_log),
+            "project_log": project_log,
         }
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(exc))
 
+
+
+@app.get("/result/{run_id}", response_model=RunResponse, tags=["pipeline"])
+def get_run_result(run_id: str):
+    try:
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = app_graph.get_state(config)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+        final_state = snapshot.values
+
+        artifact_paths = final_state.get("output_artifacts", {})
+        echarts_options = {}
+        for key, val in artifact_paths.items():
+            if key.startswith("echarts_") or "echarts" in key:
+                try:
+                    p = Path(val)
+                    if p.exists():
+                        content = p.read_text(encoding="utf-8")
+                        echarts_options[key.replace("echarts_", "")] = json.loads(content)
+                except Exception:
+                    pass
+
+        approved_viz = final_state.get("approved_visualizations", {})
+        if isinstance(approved_viz, dict) and "visualizations" in approved_viz:
+            for i, viz in enumerate(approved_viz["visualizations"]):
+                viz_id = viz.get("title", f"viz_{i}")
+                if "variations" in viz:
+                    echarts_options[viz_id] = viz
+
+        approved_insights_data = final_state.get("approved_insights", {})
+        insights = approved_insights_data.get("insights", []) if isinstance(approved_insights_data, dict) else []
+
+        return RunResponse(
+            run_id=run_id,
+            pipeline_stage=final_state.get("current_step", "UNKNOWN"),
+            active_division=final_state.get("active_division"),
+            intent_class=final_state.get("intent_class"),
+            artifact_paths={k: v for k, v in artifact_paths.items() if not k.startswith("echarts_")},
+            echarts_options=echarts_options,
+            insights=insights,
+            user_message=final_state.get("error_state"),
+            error=None,
+            project_log=final_state.get("project_log", []),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(exc))
+
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/artifact", tags=["meta"])
+def get_artifact(path: str):
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return FileResponse(path)
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 

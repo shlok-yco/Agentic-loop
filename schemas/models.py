@@ -17,6 +17,7 @@ class RunRequest(BaseModel):
 
     user_query: str = Field(..., description="Natural-language question or task.")
     data_path: str = Field(..., description="Absolute path or artifact key of the input file.")
+    run_id: Optional[str] = Field(None, description="Optional custom run_id from frontend.")
 
 # ── Response ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ class RunResponse(BaseModel):
     intent_class: Optional[str]
     artifact_paths: Dict[str, str] = {}
     echarts_options: Dict[str, Any] = {}   # chart_name → ECharts option dict
-    insights: List[str] = []
+    insights: List[Dict[str, Any]] = []
     user_message: Optional[str] = None     # CTO's user-facing message
     error: Optional[str] = None
     project_log: List[Dict[str, Any]] = []

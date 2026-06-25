@@ -1,63 +1,126 @@
-# run_terminal.py
-
-import uuid
 from pprint import pprint
+from src.graph.supervisor import app
 
-from config import settings
-from src.graph.state import BIState
-from src.graph.workflow import app_graph
-import logging
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename = "logs/visualizationtool.log",
-    filemode = 'w'
+# pyrefly: ignore [missing-import]
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    ToolMessage,
 )
+
+
+def print_stream(stream):
+
+    print("\n" + "=" * 100)
+    print("WORKFLOW STARTED")
+    print("=" * 100)
+
+    for event in stream:
+
+        for node_name, state in event.items():
+
+            print("\n")
+            print("=" * 100)
+            print(f"NODE: {node_name}")
+            print("=" * 100)
+
+            messages = state.get("messages", [])
+
+            if not messages:
+                continue
+
+            last_message = messages[-1]
+
+            #
+            # Human Message
+            #
+            if isinstance(last_message, HumanMessage):
+
+                print("\n[HUMAN]")
+                print(last_message.content)
+
+            #
+            # AI Message
+            #
+            elif isinstance(last_message, AIMessage):
+
+                print("\n[AI]")
+
+                if last_message.content:
+                    print(last_message.content)
+
+                if last_message.tool_calls:
+
+                    print("\n[TOOL CALLS]")
+
+                    for tool_call in last_message.tool_calls:
+
+                        print(f"\nTool: {tool_call['name']}")
+
+                        print("Arguments:")
+                        pprint(tool_call["args"])
+
+            #
+            # Tool Message
+            #
+            elif isinstance(last_message, ToolMessage):
+
+                print("\n[TOOL RESULT]")
+
+                print(f"Tool Name : {last_message.name}")
+
+                print("\nOutput:")
+
+                try:
+                    pprint(last_message.content)
+
+                except Exception:
+                    print(last_message.content)
+
+            #
+            # Fallback
+            #
+            else:
+
+                print("\n[MESSAGE]")
+                pprint(last_message)
+
+    print("\n")
+    print("=" * 100)
+    print("WORKFLOW FINISHED")
+    print("=" * 100)
 
 
 def main():
 
-    run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
-
-    initial_state: BIState = {
-        "run_id": run_id,
-        "user_query": "Which channel creates the best balance between customer acquisition, revenue generation, and profitability?",
-        "intent_class": "",
-        "pipeline_stage": "INIT",
-        "active_division": None,
-        "current_work_order_id": None,
-        "artifact_paths": {
-            "input": "/home/shlok.koirala/denzing/my_experiments/agentic/CSVs/Retail data 1.csv"
+    state = {
+        "messages": [
+            (
+                "user",
+                """
+                What percentage share of our total squad goals do individual forward archetypes (ST, LW, RW) contribute compared to defensive units?
+                """,
+            )
+        ],
+        "input_artifacts": {
+            "customer_dataset": "csvs/fifa_player_performance_market_value.csv"
         },
-        "work_orders": {},
-        "qa_retry_counts": {
-            "engineering": 0,
-            "analytics": 0,
-            "science": 0,
-        },
-        "checkpoints": {},
-        "error_state": None,
+        "output_artifacts": {},
+        "current_step": "init",
+        "pending_tasks": [],
+        "completed_tasks": {},
+        "failed_tasks": {},
+        "project_complete": False,
         "project_log": [],
+        "reports_received": {},
     }
-
-    config = {
-        "configurable": {
-            "thread_id": run_id,
-        },
-        "recursion_limit": settings.langgraph_recursion_limit,
-    }
-
-    logging.info(f"\n=== Starting {run_id} ===\n")
-
-    for event in app_graph.stream(
-        initial_state,
-        config=config,
-        stream_mode="updates",
-    ):
-        logging.info("\n" + "=" * 80)
-        logging.info(event)
-
-    logging.info("\n=== COMPLETE ===")
+    print_stream(
+        app.stream(
+            state,
+            config={"recursion_limit": 150},
+            stream_mode="updates",
+        )
+    )
 
 
 if __name__ == "__main__":

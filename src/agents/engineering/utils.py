@@ -1,4 +1,3 @@
-from sklearn.linear_model import _stochastic_gradient
 import json
 from pathlib import Path
 from typing import Any
@@ -33,8 +32,8 @@ def profile_dataset(df: pd.DataFrame):
                 {
                     "min": float(s.min()) if not s.empty else None,
                     "max": float(s.max()) if not s.empty else None,
-                    "mean": round(float(s.mean()), 4) if not s.empty else None,
-                    "std": round(float(s.std()), 4) if not s.empty else None,
+                    "mean": float(s.mean()) if not s.empty else None,
+                    "std": float(s.std()) if not s.empty else None,
                 }
             )
         profile[col] = entry
