@@ -300,8 +300,8 @@ def lead_analyst(
 
 SUPERVISOR_TOOLS = [lead_data_engineer, lead_analyst]
 
-
-llm = LLMService(tools=SUPERVISOR_TOOLS)
+from config import settings
+llm = LLMService(tools=SUPERVISOR_TOOLS, model_name=settings.llm_fast_model)
 
 
 class SupervisorState(TypedDict):

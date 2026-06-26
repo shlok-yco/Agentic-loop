@@ -276,6 +276,7 @@ Required Output:
   "artifact_type": "business_objectives",
   "business_objectives": [
     {
+      "objective_id": "OBJ_001",
       "objective_statement": "Clear, concise objective",
       "business_rationale": "Why this matters",
       "success_criteria": ["Criteria 1", "Criteria 2"]
@@ -466,13 +467,14 @@ Required Output:
 {
   "insights":[
     {
+      "insight_id":"INS_001",
       "priority":1,
       "title":"",
       "finding":"",
       "evidence":[],
       "business_impact":"",
       "recommendation":"Only if the user query explicitly asks for a recommendation. Omit or leave empty otherwise.",
-      "supported_business_objectives":["Full text of the objective, DO NOT use IDs like OBJ_001"],
+      "supported_business_objectives":["OBJ_001"],
       "confidence":0.95
     }
   ],
@@ -521,14 +523,15 @@ Required Output:
 {
   "visualizations":[
     {
+      "visualization_id":"VIZ_001",
       "title":"",
-      "supported_insights":["Full text of the insight, DO NOT use IDs like INS_001"],
-      "supported_business_objectives":["Full text of the objective, DO NOT use IDs like OBJ_001"],
+      "supported_insights":["INS_001"],
+      "supported_business_objectives":["OBJ_001"],
       "priority":1,
       "variations":[
         {
           "chart_type":"",
-          "reasoning":"Clear explanation of why you chose this specific chart type in the first place, avoiding any mention of IDs. Write a user understandable clear reasoning.",
+          "reasoning":"Clear explanation of why you chose this specific chart type in the first place, avoiding any mention of IDs.",
           "expected_takeaway":"User understandable clear summary, insights, and takeaways.",
           "echarts_option":{}
         }

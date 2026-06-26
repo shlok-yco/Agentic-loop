@@ -91,6 +91,16 @@ def write_artifact(
     try:
         # Validate JSON
         data = json.loads(artifact_content)
+        
+        # Sanitize and validate ECharts JSON
+        if artifact_type == "approved_visualizations" or "visualizations" in data:
+            invalid_patterns = ["[object Object]", "toLocaleString", "function("]
+            if any(pattern in artifact_content for pattern in invalid_patterns):
+                return json.dumps({
+                    "status": "ERROR",
+                    "message": "Validation Failed: Found Javascript functions or '[object Object]' in your JSON. JSON does not support Javascript functions. Echarts JSON must be pure JSON data only. Fix the specific chart containing these and remove Javascript formatters, using ECharts template strings like '{c}' instead."
+                })
+                
         p.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         return json.dumps({
             "status": "ok",
@@ -252,6 +262,14 @@ def generate_echarts_option(
 
     p = Path(output_path)
     p.parent.mkdir(parents=True, exist_ok=True)
+
+    # Validate for sloppy Javascript hallucinates
+    invalid_patterns = ["[object Object]", "toLocaleString", "function("]
+    if any(pattern in echarts_option for pattern in invalid_patterns):
+        return json.dumps({
+            "status": "ERROR",
+            "message": "Validation Failed: Found Javascript functions or '[object Object]' in your JSON. JSON does not support Javascript functions. Echarts JSON must be pure JSON data only. Fix your chart and remove Javascript formatters, using ECharts template strings like '{c}' instead."
+        })
 
     try:
         option = json.loads(echarts_option)

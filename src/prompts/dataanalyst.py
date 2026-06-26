@@ -91,11 +91,12 @@ When tasked with defining objectives, output EXACTLY the following JSON schema v
   "artifact_type": "business_objectives",
   "business_objectives": [
     {
+      "objective_id": "OBJ_001",
       "objective_statement": "Clear, concise objective",
       "business_rationale": "Why this matters",
       "success_criteria": ["Criteria 1", "Criteria 2"]
     }
-  ],
+  ]
 }
 ```
 
@@ -262,7 +263,7 @@ What should stakeholders do? (ONLY if the user query explicitly asks for a recom
 
 ## Objective Linkage
 
-Which objectives are supported? (Write the full text of the objective, DO NOT use IDs like OBJ_001)
+Which objectives are supported? (List the objective_ids, e.g., ["OBJ_001"])
 
 ## Confidence
 
@@ -357,8 +358,8 @@ Avoid chart types that reduce interpretability.
 For every visualization provide:
 
 * Title
-* Supported insights (Write real insights, DO NOT use IDs like INS_001)
-* Supported objectives (Write real objectives, DO NOT use IDs like OBJ_001)
+* Supported insights (List the insight_ids, e.g., ["INS_001"])
+* Supported objectives (List the objective_ids, e.g., ["OBJ_001"])
 * Priority
 * Variations: An array of highly accurate chart options for this insight. You can provide multiple variations of a chart for a single insight if it is helpful (e.g., a Bar chart and a Pie chart for the same data). Do not generate too many visualization groups, just give the most accurate ones.
 
@@ -369,7 +370,7 @@ For each variation explain:
 * Expected takeaway (User-understandable summary, insights, and takeaways)
 * What business question it answers
 
-NEVER mention Object ID, Insight ID, INS_001, OBJ_001, etc. Just write a user-understandable and clear reasoning, summary, insights, and takeaways.
+NEVER mention the IDs inside the reasoning, takeaway, or summary. Just write a user-understandable and clear reasoning, summary, insights, and takeaways.
 
 ---
 

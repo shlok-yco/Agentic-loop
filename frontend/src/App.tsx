@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactECharts from "echarts-for-react";
-import { MessageSquare, Upload, Play, Terminal, Database, Loader2, Bot, FileText } from "lucide-react";
+import { MessageSquare, Upload, Play, Terminal, Database, Loader2, Bot, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -45,36 +45,42 @@ function ChartGroup({ opt }: { opt: any }) {
   const title = opt.title;
 
   return (
-    <div className="flex flex-col mb-8 border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
-      <div className="bg-gray-50 p-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="font-bold text-gray-800">{title || "Visualization"}</h3>
+    <div className="flex flex-col mb-8 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-md">
+      <div className="bg-gray-50 p-3 border-b border-gray-200 flex items-center justify-between">
+        <h3 className="font-bold text-gray-800 text-sm">{title || "Visualization"}</h3>
         {variations.length > 1 && (
-          <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-gray-200 shadow-sm">
-            <button onClick={() => setVariationIndex(prev => Math.max(0, prev - 1))} disabled={variationIndex === 0} className="p-1 hover:bg-gray-100 rounded text-gray-600 disabled:opacity-30 transition">&lt;</button>
-            <span className="text-xs font-medium text-gray-600">{variationIndex + 1} / {variations.length}</span>
-            <button onClick={() => setVariationIndex(prev => Math.min(variations.length - 1, prev + 1))} disabled={variationIndex === variations.length - 1} className="p-1 hover:bg-gray-100 rounded text-gray-600 disabled:opacity-30 transition">&gt;</button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setVariationIndex(prev => Math.max(0, prev - 1))} disabled={variationIndex === 0} className="p-1 hover:bg-gray-200 rounded disabled:opacity-50">&lt;</button>
+            <span className="text-xs text-gray-500">{variationIndex + 1}/{variations.length}</span>
+            <button onClick={() => setVariationIndex(prev => Math.min(variations.length - 1, prev + 1))} disabled={variationIndex === variations.length - 1} className="p-1 hover:bg-gray-200 rounded disabled:opacity-50">&gt;</button>
           </div>
         )}
       </div>
-      <div className="p-4">
-        <div className="h-80 md:h-96 w-full mb-4">
+      <div className="p-6">
+        <div className="h-80 md:h-96 w-full mb-6 border border-gray-100 rounded-xl p-2 bg-white shadow-inner">
           <ReactECharts option={echartsOption} notMerge={true} style={{ height: '100%', width: '100%' }} />
         </div>
-        <div className="px-2 text-sm text-gray-800 space-y-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+        <div className="text-sm text-gray-800 space-y-4 bg-emerald-50/30 p-5 rounded-xl border border-emerald-100">
           {currentVariation.chart_type && (
-            <div className="inline-block px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold uppercase tracking-wider mb-2">
-              {currentVariation.chart_type}
+            <div className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold uppercase tracking-wider shadow-sm">
+              Chart Type: {currentVariation.chart_type}
             </div>
           )}
           {reasoning && (
-            <p className="leading-relaxed text-gray-700">
-              <strong className="text-gray-900 block mb-1">Reasoning:</strong> {reasoning}
-            </p>
+            <div className="leading-relaxed text-gray-700">
+              <strong className="text-gray-900 text-base mb-1 flex items-center gap-2">
+                <Bot size={16} className="text-emerald-600" /> Reasoning
+              </strong> 
+              <p className="ml-6">{reasoning}</p>
+            </div>
           )}
           {takeaway && (
-            <p className="leading-relaxed text-gray-700">
-              <strong className="text-gray-900 block mb-1">Takeaway:</strong> {takeaway}
-            </p>
+            <div className="leading-relaxed text-gray-700">
+              <strong className="text-gray-900 text-base mb-1 flex items-center gap-2">
+                <FileText size={16} className="text-emerald-600" /> Expected Takeaway
+              </strong>
+              <p className="ml-6">{takeaway}</p>
+            </div>
           )}
         </div>
       </div>
@@ -450,32 +456,63 @@ export default function App() {
                     
                     {run.status === "COMPLETED" && (
                        <div className="space-y-8 mt-6">
-                         {run.insights.length > 0 && run.insights.map((ins, idx) => (
-                            <div key={`ins-${idx}`} className="space-y-4 mb-4 pb-4 border-b border-gray-100">
-                              <div className="prose text-sm md:text-base text-gray-800">
-                                <h4 className="font-bold text-lg mb-2 text-gray-900">{ins.title}</h4>
-                                <p className="leading-relaxed">{ins.finding}</p>
-                                {ins.recommendation && (
-                                  <div className="mt-3 bg-emerald-50 text-emerald-800 p-3 rounded-lg text-sm border border-emerald-100">
-                                    <strong className="block mb-1">Recommendation:</strong> {ins.recommendation}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                         ))}
-                         
-                         {/* Render charts sorted by priority */}
-                         <div className="grid grid-cols-1 gap-8 mt-8">
-                             {Object.entries(run.echartsOptions)
+                         {(() => {
+                            const renderedCharts = new Set<string>();
+                            const chartsEntries = Object.entries(run.echartsOptions)
                                .sort(([, a], [, b]) => {
                                   const pA = a.priority !== undefined ? a.priority : 999;
                                   const pB = b.priority !== undefined ? b.priority : 999;
                                   return pA - pB;
-                               })
-                               .map(([key, opt]) => (
-                                 <ChartGroup key={key} opt={opt} />
-                               ))}
-                         </div>
+                               });
+
+                            return (
+                              <>
+                                {run.insights.length > 0 && run.insights.map((ins, idx) => {
+                                   const chartsToRender = chartsEntries.filter(([key, opt]) => {
+                                     if (renderedCharts.has(key)) return false;
+                                     const supported = Array.isArray(opt.supported_insights) ? opt.supported_insights : [];
+                                     const lastSupportedInsight = supported.map((sId: string) => run.insights.findIndex(i => i.insight_id === sId || (i.insight_id && sId.includes(i.insight_id))))
+                                                                           .filter((i: number) => i !== -1)
+                                                                           .sort((a: number, b: number) => b - a)[0];
+                                     return lastSupportedInsight === idx;
+                                   });
+                                   
+                                   chartsToRender.forEach(([key]) => renderedCharts.add(key));
+
+                                   return (
+                                     <React.Fragment key={`ins-group-${idx}`}>
+                                       {chartsToRender.length > 0 && (
+                                         <div className="grid grid-cols-1 gap-8 mb-8">
+                                           {chartsToRender.map(([key, opt]) => (
+                                             <ChartGroup key={key} opt={opt} />
+                                           ))}
+                                         </div>
+                                       )}
+                                       <div className="space-y-4 mb-4 pb-4 border-b border-gray-100">
+                                         <div className="prose text-sm md:text-base text-gray-800">
+                                           <h4 className="font-bold text-lg mb-2 text-gray-900">{ins.title}</h4>
+                                           <p className="leading-relaxed">{ins.finding}</p>
+                                           {ins.recommendation && (
+                                             <div className="mt-3 bg-emerald-50 text-emerald-800 p-3 rounded-lg text-sm border border-emerald-100">
+                                               <strong className="block mb-1">Recommendation:</strong> {ins.recommendation}
+                                             </div>
+                                           )}
+                                         </div>
+                                       </div>
+                                     </React.Fragment>
+                                   );
+                                })}
+                                
+                                {chartsEntries.filter(([key]) => !renderedCharts.has(key)).length > 0 && (
+                                   <div className="grid grid-cols-1 gap-8 mt-8">
+                                     {chartsEntries.filter(([key]) => !renderedCharts.has(key)).map(([key, opt]) => (
+                                        <ChartGroup key={key} opt={opt} />
+                                     ))}
+                                   </div>
+                                )}
+                              </>
+                            );
+                         })()}
                        </div>
                     )}
                   </div>

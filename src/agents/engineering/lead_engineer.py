@@ -23,7 +23,8 @@ load_dotenv()
 
 lde_logger = setup_logger("lead_engineer", "logs/lead_engineer.log")
 
-llm = LLMService(tools=ENGINEERING_TOOLS)
+from config import settings
+llm = LLMService(tools=ENGINEERING_TOOLS, model_name=settings.llm_fast_model)
 
 def _append_live_log(run_id: str, log_entry: dict):
     if not run_id:
