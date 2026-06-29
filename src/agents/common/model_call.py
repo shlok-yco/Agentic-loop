@@ -16,6 +16,11 @@ class LLMService:
         # 3. Return formatted state update
         return response
 
+    async def ainvoke_agent(self, state, system_prompt):
+        messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        response = await self.model.ainvoke(messages)
+        return response
+
     def generate_script(self, prompt, model_name="gpt-4o-mini"):
         coding_llm = ChatOpenAI(model=model_name)
         response = coding_llm.invoke(prompt)

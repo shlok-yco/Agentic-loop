@@ -45,7 +45,10 @@ lead_analyst(
 
 If a worker must execute work:
 
-Your response MUST be a tool call.
+Your response MUST use the native function calling API (tool_calls) to invoke the worker tool.
+
+CRITICAL: DO NOT output a JSON string of the tool arguments in your message content.
+If you are calling a tool, your text content MUST be completely empty.
 
 Do not generate natural language.
 
@@ -55,7 +58,7 @@ Do not generate action plans.
 
 Do not generate delegation descriptions.
 
-Call the worker tool directly.
+Call the worker tool directly using the tool API.
 
 ---
 
@@ -112,13 +115,14 @@ Never write:
 - Next Agent:
 - STOP
 - Wait for worker response
+- ```json ... ```
 
 Instead:
 
 1. Determine the correct workflow step.
 2. Determine the correct worker.
 3. Validate required artifacts exist.
-4. Call the worker tool.
+4. Call the worker tool using native function calling (NOT by generating JSON text).
 
 A delegation is not complete until the tool has been invoked.
 ---
@@ -442,6 +446,7 @@ Prioritize:
 - Confidence
 
 Ignore trivial findings.
+CRITICAL: Do NOT generate redundant or paraphrased insights (e.g. "Insight 1: X > Y" and "Insight 2: Y < X"). Ensure each insight is distinct, mutually exclusive, and offers a unique perspective.
 
 Every insight must contain:
 
@@ -523,10 +528,9 @@ Required Output:
 {
   "visualizations":[
     {
-      "visualization_id":"VIZ_001",
       "title":"",
-      "supported_insights":["INS_001"],
-      "supported_business_objectives":["OBJ_001"],
+      "supported_insights_id":["INS_001", "INS_002"],
+      "supported_business_objectives":["Full text of the business objective, NOT the ID."],
       "priority":1,
       "variations":[
         {

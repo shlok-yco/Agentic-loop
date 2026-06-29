@@ -3,6 +3,7 @@ from platform import python_version_tuple
 from uuid import uuid4
 import json
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
 # pyrefly: ignore [missing-import]
@@ -29,55 +30,57 @@ llm_service = LLMService(tools=[])
 
 
 @tool
-def ingest_dataset(file_path: str):
+def analyze_and_profile_dataset(
+    file_path: str,
+    output_profile_path: str,
+    output_summary_path: str,
+    state: Annotated[dict, InjectedState] = None,
+):
     """
-    This is tool for the file/ data ingestion function to load or read the data
-    """
-    try:
-        df = _read(file_path)
-        return json.dumps(
-            {
-                "shape": list(df.shape),
-                "columns": list(df.columns),
-                "dtypes": df.dtypes.astype(str).to_dict(),
-                "head": df.head(5).to_dict(orient="records"),
-                "null_counts": df.isnull().sum().to_dict(),
-                "duplicate_rows": int(df.duplicated().sum()),
-            },
-            default=str,
-        )
-    except Exception as e:
-        return str(e)
-
-
-@tool
-def profile_dataset(file_path: str, output_path: str, state: Annotated[dict, InjectedState] = None):
-    """
-    Run a lightweight profiling pass on a file and return per-column statistics
-    (dtype, null %, unique count, min/max/mean for numeric columns).
+    Run a full profiling and summary pass on a dataset and output the results.
+    This replaces ingest, profile, and summary steps.
 
     Args:
         file_path: Path to the data file.
-        output_path: Path to the output json file.
+        output_profile_path: Path to the output JSON profile file.
+        output_summary_path: Path to the output JSON summary file.
     """
     if state and state.get("input_artifacts", {}).get("output_dir"):
-        output_path = str(Path(state["input_artifacts"]["output_dir"]) / Path(output_path).name)
+        out_dir = Path(state["input_artifacts"]["output_dir"])
+        output_profile_path = str(out_dir / Path(output_profile_path).name)
+        output_summary_path = str(out_dir / Path(output_summary_path).name)
 
     try:
         df = _read(file_path)
+
+        # 1. Profile Data
         data_profile = generate_profile(df)
-        out_path = Path(output_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(data_profile, default=str, indent=2))
+        prof_path = Path(output_profile_path)
+        prof_path.parent.mkdir(parents=True, exist_ok=True)
+        prof_path.write_text(json.dumps(data_profile, default=str, indent=2))
+
+        # 2. Summary Data
+        summary = {
+            "source": file_path,
+            "shape": list(df.shape),
+            "columns": list(df.columns),
+            "dtypes": df.dtypes.astype(str).to_dict(),
+            "null_counts": df.isnull().sum().to_dict(),
+            "duplicate_rows": int(df.duplicated().sum()),
+            "sample_rows": df.head(10).to_dict(orient="records"),
+            "numeric_stats": df.describe().to_dict(),
+        }
+        sum_path = Path(output_summary_path)
+        sum_path.parent.mkdir(parents=True, exist_ok=True)
+        sum_path.write_text(json.dumps(summary, default=str, indent=2))
+
         return json.dumps(
             {
                 "status": "ok",
-                "output_path": output_path,
+                "profile_path": output_profile_path,
+                "summary_path": output_summary_path,
                 "shape": list(df.shape),
                 "columns": list(df.columns),
-                "dtypes": df.dtypes.astype(str).to_dict(),
-                "null_counts": df.isnull().sum().to_dict(),
-                "duplicate_rows": int(df.duplicated().sum()),
             }
         )
     except Exception as e:
@@ -93,6 +96,8 @@ def clean_dataset(
     fill_numeric_strategy: str = "median",
     fill_categorical_strategy: str = "unknown",
     drop_null_threshold: float = 0.9,
+    columns_to_drop: list[str] = None,
+    cleaning_steps_json: str = None,
     state: Annotated[dict, InjectedState] = None,
 ):
     """
@@ -109,35 +114,54 @@ def clean_dataset(
             fill_numeric_strategy: 'median' | 'mean' | 'zero'.
             fill_categorical_strategy: Fill string with this value.
             drop_null_threshold: Drop columns with null fraction > this value (0–1).
+            columns_to_drop: List of columns to explicitly drop.
+            cleaning_steps_json: JSON string of cleaning_steps array from the Preprocessing Blueprint.
 
         Returns:
             JSON with output_path, shape_before, shape_after, cleaning_log.
     """
     if state and state.get("input_artifacts", {}).get("output_dir"):
-        output_path = str(Path(state["input_artifacts"]["output_dir"]) / Path(output_path).name)
+        output_path = str(
+            Path(state["input_artifacts"]["output_dir"]) / Path(output_path).name
+        )
 
     df = _read(file_path)
     log = []
     shape_before = list(df.shape)
+    
     # 1. Normalise columns
-    clean_data._normalize_columns(df, normalize_columns)
+    df = clean_data._normalize_columns(df, normalize_columns)
     log.append(f"Normalized columns: {normalize_columns}")
 
     # 2. drop high-null cols
-    clean_data._drop_null_cols(df, drop_null_threshold)
+    df = clean_data._drop_null_cols(df, drop_null_threshold)
     log.append(f"Dropped high-null columns with threshold: {drop_null_threshold}")
 
     # 3. Duplicates
-    clean_data._drop_duplicates(df, drop_duplicates)
+    df = clean_data._drop_duplicates(df, drop_duplicates)
     log.append(f"Dropped duplicates: {drop_duplicates}")
 
     # 4. Numeric null-fill and Categorical null-fill
-    clean_data._fill_nulls(df, fill_numeric_strategy, fill_categorical_strategy)
+    df = clean_data._fill_nulls(df, fill_numeric_strategy, fill_categorical_strategy)
     log.append(
         f"Filled nulls with strategy: {fill_numeric_strategy} for numeric and {fill_categorical_strategy} for categorical"
     )
 
-    # 5. Dtype coercion
+    # 5. Drop specific columns from blueprint
+    if columns_to_drop:
+        df = clean_data._drop_columns(df, columns_to_drop)
+        log.append(f"Dropped columns specified in blueprint: {columns_to_drop}")
+
+    # 6. Execute custom cleaning steps from blueprint
+    if cleaning_steps_json:
+        try:
+            cleaning_steps = json.loads(cleaning_steps_json)
+            df = clean_data._execute_cleaning_steps(df, cleaning_steps)
+            log.append(f"Executed custom cleaning steps: {len(cleaning_steps)} steps")
+        except Exception as e:
+            log.append(f"Failed to execute cleaning steps: {e}")
+
+    # 7. Dtype coercion
     df.to_csv(output_path, index=False)
     log.append(f"Saved cleaned data to: {output_path}")
 
@@ -191,34 +215,7 @@ def validate_schema(
     )
 
 
-@tool
-def export_data_summary(file_path: str, output_json_path: str, state: Annotated[dict, InjectedState] = None) -> str:
-    """
-    Export a full data quality summary (shape, dtypes, null counts, sample rows)
-    to a JSON file for downstream agents to reference.
-
-    Args:
-        file_path: Source data file.
-        output_json_path: Where to write the JSON summary.
-    """
-    if state and state.get("input_artifacts", {}).get("output_dir"):
-        output_json_path = str(Path(state["input_artifacts"]["output_dir"]) / Path(output_json_path).name)
-
-    df = _read(file_path)
-    summary = {
-        "source": file_path,
-        "shape": list(df.shape),
-        "columns": list(df.columns),
-        "dtypes": df.dtypes.astype(str).to_dict(),
-        "null_counts": df.isnull().sum().to_dict(),
-        "duplicate_rows": int(df.duplicated().sum()),
-        "sample_rows": df.head(10).to_dict(orient="records"),
-        "numeric_stats": df.describe().to_dict(),
-    }
-    out = Path(output_json_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(summary, default=str, indent=2))
-    return json.dumps({"status": "ok", "output_path": str(out)})
+# export_data_summary removed (consolidated)
 
 
 @tool
@@ -254,7 +251,7 @@ def generate_python_script(
 
     # Strip markdown fences if present
     if code.startswith("```python"):
-        code = code[len("```python"):].strip()
+        code = code[len("```python") :].strip()
     if code.startswith("```"):
         code = code[3:].strip()
     if code.endswith("```"):
@@ -272,11 +269,16 @@ def generate_python_script(
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(code, encoding="utf-8")
 
-    return json.dumps({
-        "status": "ok",
-        "script_code": code,
-        "script_path": str(script_path),
-    })
+    return json.dumps(
+        {
+            "status": "ok",
+            "script_code": code,
+            "script_path": str(script_path),
+        }
+    )
+
+
+
 
 
 @tool
@@ -286,23 +288,23 @@ def execute_python_script(
     state: Annotated[dict, InjectedState] = None,
 ):
     """
-    Execute generated Python code by writing it to a temporary
-    script file and running it.
+    Execute generated Python code instantly via in-process `exec()`.
 
     Args:
         script_code: Python source code.
-        timeout: Maximum execution time in seconds.
+        timeout: Maximum execution time (not fully enforced in `exec` but kept for interface).
 
     Returns:
         Structured execution report.
     """
-
     if not script_code.strip():
-        return {
-            "status": "failure",
-            "error_type": "EmptyScript",
-            "message": "No Python code was provided.",
-        }
+        return json.dumps(
+            {
+                "status": "failure",
+                "error_type": "EmptyScript",
+                "message": "No Python code was provided.",
+            }
+        )
 
     workspace_path = "generated_scripts"
     if state and state.get("input_artifacts", {}).get("scripts_dir"):
@@ -312,7 +314,6 @@ def execute_python_script(
     workspace.mkdir(parents=True, exist_ok=True)
 
     run_id = str(uuid4())[:8]
-
     script_path = workspace / f"run_{run_id}.py"
 
     INJECTED_CODE = """
@@ -348,59 +349,59 @@ json.dump = _patched_dump
 json.dumps = _patched_dumps
 """
 
+    full_code = INJECTED_CODE + "\n" + script_code
+    script_path.write_text(full_code, encoding="utf-8")
+
+    start_time = time.time()
+    
+    import io
+    from contextlib import redirect_stdout, redirect_stderr
+    import traceback
+
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+    
+    # Provide a rich namespace
+    namespace = {
+        "pd": pd,
+        "np": np,
+        "json": json,
+    }
+
     try:
-        script_path.write_text(
-            INJECTED_CODE + "\n" + script_code,
-            encoding="utf-8",
-        )
-
-        start_time = time.time()
-
-        result = subprocess.run(
-            [sys.executable, str(script_path)],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-        execution_time = round(
-            time.time() - start_time,
-            2,
-        )
-
+        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+            exec(full_code, namespace)
+            
+        execution_time = round(time.time() - start_time, 3)
         return json.dumps(
             {
-                "status": ("success" if result.returncode == 0 else "failure"),
+                "status": "success",
                 "run_id": run_id,
                 "script_path": str(script_path),
-                "return_code": result.returncode,
+                "return_code": 0,
                 "execution_time_seconds": execution_time,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-            }
-        )
-
-    except subprocess.TimeoutExpired:
-
-        return json.dumps(
-            {
-                "status": "failure",
-                "run_id": run_id,
-                "script_path": str(script_path),
-                "error_type": "TimeoutExpired",
-                "message": (f"Execution exceeded " f"{timeout} seconds."),
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_buf.getvalue(),
             }
         )
 
     except Exception as e:
-
+        execution_time = round(time.time() - start_time, 3)
+        error_tb = traceback.format_exc()
+        # also capture anything printed to stderr before the crash
+        stderr_output = stderr_buf.getvalue() + "\n" + error_tb
+        
         return json.dumps(
             {
                 "status": "failure",
                 "run_id": run_id,
                 "script_path": str(script_path),
+                "return_code": 1,
+                "execution_time_seconds": execution_time,
                 "error_type": type(e).__name__,
                 "message": str(e),
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_output,
             }
         )
 
@@ -495,15 +496,59 @@ def verify_artifact(file_path: str):
             }
         )
 
+@tool
+def read_artifacts(
+    file_paths: list[str],
+    state: Annotated[dict, InjectedState] = None,
+):
+    """
+    Read the contents of one or more generated JSON artifacts.
+    Use this to quickly inspect the contents of data_profile.json, data_summary.json, etc. without re-ingesting the dataset.
+    
+    Args:
+        file_paths: A list of file paths to read.
+        
+    Returns:
+        JSON string containing the parsed contents of the requested files.
+    """
+    results = {}
+    for path in file_paths:
+        try:
+            p = Path(path)
+            # Try to resolve relative paths against the output directory
+            if not p.is_absolute() and state and state.get("input_artifacts", {}).get("output_dir"):
+                # If path isn't found as-is, check if it's just a basename in output_dir
+                if not p.exists():
+                    p = Path(state["input_artifacts"]["output_dir"]) / p.name
+            
+            if not p.exists():
+                results[path] = {"status": "error", "message": "File not found"}
+                continue
+                
+            if p.suffix == ".json":
+                results[path] = json.loads(p.read_text(encoding="utf-8"))
+            elif p.suffix == ".csv":
+                df = pd.read_csv(p, engine="pyarrow")
+                results[path] = {
+                    "shape": list(df.shape),
+                    "columns": list(df.columns),
+                    "sample": df.head(5).to_dict(orient="records")
+                }
+            else:
+                results[path] = {"status": "error", "message": f"Unsupported file type: {p.suffix}"}
+        except Exception as e:
+            results[path] = {"status": "error", "message": str(e)}
+            
+    return json.dumps(results, default=str)
+
 
 # tool registry
 ENGINEERING_TOOLS = [
-    ingest_dataset,
-    profile_dataset,
+    analyze_and_profile_dataset,
     clean_dataset,
-    export_data_summary,
     generate_python_script,
     execute_python_script,
     submit_engineer_report,
     verify_artifact,
+    read_artifacts,
 ]

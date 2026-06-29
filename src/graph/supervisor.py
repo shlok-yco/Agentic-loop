@@ -2,6 +2,7 @@ import json
 import operator
 from pathlib import Path
 from typing import Any, TypedDict, Annotated, Sequence, List, Dict, Literal
+import asyncio
 from dotenv import load_dotenv
 
 from langchain_core.tools import tool
@@ -69,17 +70,19 @@ STEP_ORDER = [
 ]
 
 
-def _read_artifact_json(path: str) -> dict:
-    """Try to read a JSON artifact from disk, return {} on failure."""
-    try:
-        p = Path(path)
-        if p.exists():
-            content = p.read_text(encoding="utf-8")
-            data = json.loads(content)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
-    return {}
+async def _read_artifact_json(path: str) -> dict:
+    """Try to read a JSON artifact from disk asynchronously, return {} on failure."""
+    def read_sync():
+        try:
+            p = Path(path)
+            if p.exists():
+                content = p.read_text(encoding="utf-8")
+                data = json.loads(content)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            pass
+        return {}
+    return await asyncio.to_thread(read_sync)
 
 
 def _next_step(current: str) -> str:
@@ -99,7 +102,7 @@ def _next_step(current: str) -> str:
 from langgraph.prebuilt import InjectedState
 
 @tool
-def lead_data_engineer(
+async def lead_data_engineer(
     summary: str, 
     tasks: List[str], 
     input_artifacts: Dict[str, str], 
@@ -133,7 +136,7 @@ def lead_data_engineer(
         "response_format": response_format,
         "report_submitted": False,
     }
-    result = lead_engineer_node.invoke(subagent_input)
+    result = await lead_engineer_node.ainvoke(subagent_input)
     response_data_dict = {}
     if result.get("response_data"):
         try:
@@ -179,7 +182,7 @@ def lead_data_engineer(
 
 
 @tool
-def lead_analyst(
+async def lead_analyst(
     summary: str,
     tasks: List[str],
     input_artifacts: Dict[str, str],
@@ -228,7 +231,7 @@ def lead_analyst(
         "report_submitted": False,
     }
 
-    result = lead_analyst_node.invoke(subagent_input)
+    result = await lead_analyst_node.ainvoke(subagent_input)
 
     generated = result.get("generated_artifacts", {})
 
@@ -236,7 +239,7 @@ def lead_analyst(
     # instead of always getting empty {} from unset state fields
     artifact_content = {}
     for key, path in generated.items():
-        content = _read_artifact_json(path)
+        content = await _read_artifact_json(path)
         if content:
             artifact_content[key] = content
 
@@ -301,7 +304,7 @@ def lead_analyst(
 SUPERVISOR_TOOLS = [lead_data_engineer, lead_analyst]
 
 from config import settings
-llm = LLMService(tools=SUPERVISOR_TOOLS, model_name=settings.llm_fast_model)
+llm = LLMService(tools=SUPERVISOR_TOOLS, model_name=settings.llm_model)
 
 
 class SupervisorState(TypedDict):
@@ -358,7 +361,7 @@ class SupervisorState(TypedDict):
 ########################################
 
 
-def Supervisor(state: SupervisorState) -> SupervisorState:
+async def Supervisor(state: SupervisorState) -> SupervisorState:
 
     # Build rich context for the supervisor
     current_step = state.get("current_step", "init")
@@ -388,15 +391,76 @@ def Supervisor(state: SupervisorState) -> SupervisorState:
     # Message truncation: keep the first message + last N to avoid context overflow
     messages = list(state["messages"])
     if len(messages) > MAX_SUPERVISOR_MESSAGES:
-        messages = messages[:1] + messages[-(MAX_SUPERVISOR_MESSAGES - 1):]
+        # We must not orphan ToolMessages from their AIMessage tool_calls
+        # A safer approach: keep the first message, and find a safe index to slice from the end
+        safe_idx = len(messages) - (MAX_SUPERVISOR_MESSAGES - 1)
+        
+        # Ensure we don't split an AIMessage and its ToolMessages
+        while safe_idx < len(messages) and getattr(messages[safe_idx], "type", "") == "tool":
+            safe_idx -= 1
+            
+        messages = messages[:1] + messages[safe_idx:]
 
     truncated_state = {**state, "messages": messages}
 
-    response = llm.invoke_agent(
+    # Truncate large artifacts in state to avoid context overflow and high TTFT
+    def _truncate_dict(d: dict, max_items=5) -> dict:
+        if not isinstance(d, dict): return d
+        res = {}
+        for k, v in d.items():
+            if isinstance(v, list) and len(v) > max_items:
+                res[k] = v[:max_items] + [f"... ({len(v) - max_items} more items truncated)"]
+            elif isinstance(v, dict):
+                res[k] = _truncate_dict(v, max_items)
+            else:
+                res[k] = v
+        return res
+
+    for key in ["data_profile", "data_summary", "preprocessing_blueprint", "approved_visualizations"]:
+        if truncated_state.get(key) and isinstance(truncated_state[key], dict):
+            # Only truncate if it's very large
+            if len(str(truncated_state[key])) > 2000:
+                truncated_state[key] = _truncate_dict(truncated_state[key])
+
+    response = await llm.ainvoke_agent(
         state=truncated_state,
         system_prompt=supervisor_prompt + f"\nContext: {context}",
     )
     supervisor_logger.info(response)
+
+    # Fallback for LLMs that output tool arguments as JSON in content
+    if not getattr(response, "tool_calls", None) and getattr(response, "content", ""):
+        try:
+            content_str = response.content.strip()
+            if content_str.startswith("```json"):
+                content_str = content_str[7:]
+            if content_str.startswith("```"):
+                content_str = content_str[3:]
+            if content_str.endswith("```"):
+                content_str = content_str[:-3]
+            
+            parsed = json.loads(content_str.strip())
+            
+            if isinstance(parsed, dict) and "tasks" in parsed:
+                import uuid
+                tool_name = "lead_data_engineer" if current_step in ["init", "preprocessing_blueprint"] else "lead_analyst"
+                
+                tool_call = {
+                    "name": tool_name,
+                    "args": parsed,
+                    "id": f"call_{uuid.uuid4().hex[:16]}"
+                }
+                
+                response = AIMessage(
+                    content="",
+                    additional_kwargs=response.additional_kwargs,
+                    response_metadata=response.response_metadata,
+                    id=response.id,
+                    tool_calls=[tool_call]
+                )
+                supervisor_logger.info(f"Synthesized tool call from content: {tool_call}")
+        except Exception:
+            pass
 
     log = {
         "division": "Supervisor",
@@ -455,36 +519,42 @@ def update_project_state(state: SupervisorState):
         t for t in state.get("pending_tasks", []) if t not in completed_keys
     ]
 
-    # ── Step advancement ─────────────────────────────────────────────────
-    current_step = state.get("current_step", "init")
-
-    # Determine the highest step that has been completed based on artifacts
-    all_artifacts = set(output_artifacts.keys()) | set(generated.keys())
+    # ── Step advancement and Backtracking ────────────────────────────────
+    # Determine the highest step that has been completed based on ACTUAL artifacts
+    # and remove any artifacts from state that no longer exist on disk.
+    all_artifacts = list(output_artifacts.items()) + list(generated.items())
+    valid_artifacts_keys = set()
     achieved_steps = set()
-    for artifact_key in all_artifacts:
-        # Check both the raw key and the basename
-        step = ARTIFACT_STEP_MAP.get(artifact_key)
-        if not step:
-            # Try basename (e.g. "artifacts/data_profile.json" → "data_profile.json")
-            basename = artifact_key.rsplit("/", 1)[-1] if "/" in artifact_key else artifact_key
-            step = ARTIFACT_STEP_MAP.get(basename)
-        if step:
-            achieved_steps.add(step)
 
-    # Advance to the highest achieved step
-    for step in reversed(STEP_ORDER):
+    for artifact_key, path in all_artifacts:
+        if path and Path(path).exists():
+            valid_artifacts_keys.add(artifact_key)
+            # Check both the raw key and the basename
+            step = ARTIFACT_STEP_MAP.get(artifact_key)
+            if not step:
+                basename = artifact_key.rsplit("/", 1)[-1] if "/" in artifact_key else artifact_key
+                step = ARTIFACT_STEP_MAP.get(basename)
+            if step:
+                achieved_steps.add(step)
+        else:
+            # If it's missing, ensure it's removed from state output_artifacts
+            if artifact_key in output_artifacts:
+                del output_artifacts[artifact_key]
+
+    # Calculate current step strictly based on highest achieved step
+    # This automatically allows backtracking if artifacts were removed or missing
+    new_step = "init"
+    for step in STEP_ORDER:
         if step in achieved_steps:
-            step_idx = STEP_ORDER.index(step)
-            current_idx = STEP_ORDER.index(current_step) if current_step in STEP_ORDER else 0
-            if step_idx >= current_idx:
-                current_step = step
-            break
+            new_step = step
+    
+    current_step = new_step
 
     # Check if we've reached the final visualization step
     project_complete = current_step == "generate_visualizations" and (
-        "approved_visualizations" in all_artifacts
-        or "approved_visualizations.json" in all_artifacts
-        or any("approved_visualizations" in k for k in all_artifacts)
+        "approved_visualizations" in valid_artifacts_keys
+        or "approved_visualizations.json" in valid_artifacts_keys
+        or any("approved_visualizations" in k for k in valid_artifacts_keys)
     )
 
     if project_complete:
@@ -504,10 +574,12 @@ def update_project_state(state: SupervisorState):
     for artifact_key, state_field in ARTIFACT_STATE_FIELDS.items():
         # Check if this artifact was just generated or already exists
         artifact_path = generated.get(artifact_key) or output_artifacts.get(artifact_key)
-        if artifact_path and not state.get(state_field):
-            content = _read_artifact_json(artifact_path)
-            if content:
-                state_artifact_updates[state_field] = content
+        if artifact_path and Path(artifact_path).exists():
+            if not state.get(state_field):
+                state_artifact_updates[state_field] = {"generated": True, "path": artifact_path}
+        else:
+            if state.get(state_field):
+                state_artifact_updates[state_field] = {}
 
     subagent_logs = payload.get("subagent_logs", [])
 
@@ -542,7 +614,7 @@ def should_continue(state):
 graph = StateGraph(SupervisorState)
 graph.add_node("Supervisor", Supervisor)
 
-tool_node = ToolNode(tools=SUPERVISOR_TOOLS)
+tool_node = ToolNode(tools=SUPERVISOR_TOOLS, handle_tool_errors=True)
 graph.add_node("tools", tool_node)
 
 graph.add_node("update_project_state", update_project_state)

@@ -97,6 +97,15 @@ def run_pipeline(request: RunRequest, background_tasks: BackgroundTasks) -> RunR
         import shutil
         shutil.copy(old_data_path, new_data_path)
 
+    import time
+    metadata_path = workspace_dir / "metadata.json"
+    metadata_path.write_text(json.dumps({
+        "run_id": run_id,
+        "query": request.user_query,
+        "timestamp": time.time(),
+        "data_path": str(new_data_path.resolve())
+    }), encoding="utf-8")
+
     initial_state = {
         "run_id": run_id,
         "user_query": request.user_query,
@@ -208,6 +217,14 @@ def get_run_result(run_id: str):
                     pass
 
         approved_viz = final_state.get("approved_visualizations", {})
+        if isinstance(approved_viz, dict) and "path" in approved_viz:
+            try:
+                p = Path(approved_viz["path"])
+                if p.exists():
+                    approved_viz = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
         if isinstance(approved_viz, dict) and "visualizations" in approved_viz:
             for i, viz in enumerate(approved_viz["visualizations"]):
                 viz_id = viz.get("title", f"viz_{i}")
@@ -215,6 +232,14 @@ def get_run_result(run_id: str):
                     echarts_options[viz_id] = viz
 
         approved_insights_data = final_state.get("approved_insights", {})
+        if isinstance(approved_insights_data, dict) and "path" in approved_insights_data:
+            try:
+                p = Path(approved_insights_data["path"])
+                if p.exists():
+                    approved_insights_data = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
         insights = approved_insights_data.get("insights", []) if isinstance(approved_insights_data, dict) else []
 
         return RunResponse(
@@ -244,6 +269,24 @@ def get_artifact(path: str):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Artifact not found")
     return FileResponse(path)
+
+@app.get("/history", tags=["pipeline"])
+def get_history():
+    """Returns a list of past runs sorted by timestamp descending."""
+    workspace = Path("workspace")
+    runs = []
+    if workspace.exists():
+        for run_dir in workspace.iterdir():
+            if run_dir.is_dir():
+                meta_file = run_dir / "metadata.json"
+                if meta_file.exists():
+                    try:
+                        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                        runs.append(meta)
+                    except Exception:
+                        pass
+    runs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+    return {"history": runs}
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 

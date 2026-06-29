@@ -24,7 +24,9 @@ load_dotenv()
 lde_logger = setup_logger("lead_engineer", "logs/lead_engineer.log")
 
 from config import settings
-llm = LLMService(tools=ENGINEERING_TOOLS, model_name=settings.llm_fast_model)
+
+llm = LLMService(tools=ENGINEERING_TOOLS, model_name=settings.llm_model)
+
 
 def _append_live_log(run_id: str, log_entry: dict):
     if not run_id:
@@ -43,6 +45,7 @@ def _append_live_log(run_id: str, log_entry: dict):
             json.dump(logs, f)
     except Exception as e:
         lde_logger.error(f"Failed to append live log: {e}")
+
 
 class LdeState(TypedDict):
     run_id: str
@@ -67,20 +70,29 @@ class LdeState(TypedDict):
 ######################################
 
 
-def LDE(state: LdeState) -> LdeState:
+async def LDE(state: LdeState) -> LdeState:
     context = f"""
     Current Tasks: {state['tasks']}
     Input Artifacts: {state['input_artifacts']}
     Required Output Artifacts: {state['output_artifacts']}
     """
     state["messages"].append(("user", context))
-    response = llm.invoke_agent(state=state, system_prompt=dataengineer_prompt+ f"\nContext: {context}")
-    
+    response = await llm.ainvoke_agent(
+        state=state, system_prompt=dataengineer_prompt + f"\nContext: {context}"
+    )
+
     log_entry = {
         "division": "Data Engineer",
         "event_type": "THINKING",
         "content": response.content,
-        "tool_calls": [{"name": tc["name"], "args": tc.get("args", {})} for tc in getattr(response, "tool_calls", [])] if getattr(response, "tool_calls", None) else []
+        "tool_calls": (
+            [
+                {"name": tc["name"], "args": tc.get("args", {})}
+                for tc in getattr(response, "tool_calls", [])
+            ]
+            if getattr(response, "tool_calls", None)
+            else []
+        ),
     }
     _append_live_log(state.get("run_id", ""), log_entry)
 
@@ -99,10 +111,7 @@ def update_state(state: LdeState):
     failed = state.get("failed_tasks", [])
     generated_artifacts = state.get("generated_artifacts", {})
 
-    tool_messages = [
-        m for m in state["messages"]
-        if isinstance(m, ToolMessage)
-    ]
+    tool_messages = [m for m in state["messages"] if isinstance(m, ToolMessage)]
 
     if not tool_messages:
         return {}
@@ -119,7 +128,9 @@ def update_state(state: LdeState):
     )
 
     # Try to parse the tool output as JSON
-    content_str = latest.content if isinstance(latest.content, str) else str(latest.content)
+    content_str = (
+        latest.content if isinstance(latest.content, str) else str(latest.content)
+    )
     try:
         payload = json.loads(content_str)
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -144,16 +155,14 @@ def update_state(state: LdeState):
         "division": "Data Engineer",
         "event_type": "ACTION",
         "content": "",
-        "tool_result": latest.content
+        "tool_result": latest.content,
     }
     _append_live_log(state.get("run_id", ""), log_entry)
 
     #
     # Artifact tracking
     #
-    generated_artifacts.update(
-        payload.get("generated_artifacts", {})
-    )
+    generated_artifacts.update(payload.get("generated_artifacts", {}))
 
     if "output_path" in payload:
         artifact_name = Path(payload["output_path"]).name
@@ -186,21 +195,13 @@ def update_state(state: LdeState):
     status = payload.get("status")
 
     if status == "PASSED":
-        task_name = (
-            state["pending_tasks"][0]
-            if state["pending_tasks"]
-            else None
-        )
+        task_name = state["pending_tasks"][0] if state["pending_tasks"] else None
 
         if task_name and task_name not in completed:
             completed.append(task_name)
 
     elif status == "FAILED":
-        task_name = (
-            state["pending_tasks"][0]
-            if state["pending_tasks"]
-            else None
-        )
+        task_name = state["pending_tasks"][0] if state["pending_tasks"] else None
 
         if task_name and task_name not in failed:
             failed.append(task_name)
@@ -244,7 +245,7 @@ graph.add_node(
     update_state,
 )
 
-tool_node = ToolNode(tools=ENGINEERING_TOOLS)
+tool_node = ToolNode(tools=ENGINEERING_TOOLS, handle_tool_errors=True)
 graph.add_node("tools", tool_node)
 
 graph.set_entry_point("lde")

@@ -88,7 +88,7 @@ class Settings(BaseSettings):
 
     # Maximum number of steps the graph executor will run before aborting.
     langgraph_recursion_limit: int = Field(
-        default=50,
+        default=200,
         ge=1,
         description="LangGraph recursion / step limit (prevents infinite loops).",
     )

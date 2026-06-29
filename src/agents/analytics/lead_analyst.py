@@ -73,7 +73,7 @@ class AnalystState(TypedDict):
 ############################
 #     LDA NODE             #
 ############################
-def LDA(state: AnalystState):
+async def LDA(state: AnalystState):
 
     # Build context string so the LLM knows what to work with
     context = f"""
@@ -107,7 +107,7 @@ def LDA(state: AnalystState):
 
     truncated_state = {**state, "messages": messages}
 
-    response = llm_service.invoke_agent(
+    response = await llm_service.ainvoke_agent(
         state=truncated_state,
         system_prompt=dataanalyst_prompt + f"\nContext: {context}",
     )
@@ -245,7 +245,7 @@ def should_continue(state):
 graph_build = StateGraph(AnalystState)
 graph_build.add_node("lda", LDA)
 graph_build.add_node("update_state", update_state)
-graph_build.add_node("tools", ToolNode(tools=ANALYST_TOOLS))
+graph_build.add_node("tools", ToolNode(tools=ANALYST_TOOLS, handle_tool_errors=True))
 
 graph_build.set_entry_point("lda")
 

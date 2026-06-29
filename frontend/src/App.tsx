@@ -105,6 +105,8 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [historyRuns, setHistoryRuns] = useState<any[]>([]);
 
   const scriptsRef = useRef(scripts);
   useEffect(() => { scriptsRef.current = scripts; }, [scripts]);
@@ -116,6 +118,18 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [runs.length]);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/history`);
+        setHistoryRuns(res.data.history || []);
+      } catch (err) {
+        console.error("Failed to fetch history", err);
+      }
+    };
+    fetchHistory();
+  }, []);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -147,8 +161,9 @@ export default function App() {
       artifacts: {},
     };
 
-    setRuns(prev => [...prev, newRun]);
+    setRuns([newRun]);
     setCurrentRunId(newRunId);
+    setHistoryRuns(prev => [{ run_id: newRunId, query, timestamp: Date.now() / 1000, data_path: dataPath }, ...prev]);
     setQuery("");
     setScripts([]);
     setDataArtifacts([]);
@@ -165,6 +180,26 @@ export default function App() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const loadHistoryRun = (historyItem: any) => {
+    setRuns([{
+      runId: historyItem.run_id,
+      query: historyItem.query,
+      status: "UNKNOWN",
+      logs: [],
+      insights: [],
+      echartsOptions: {},
+      artifacts: {},
+    }]);
+    setCurrentRunId(historyItem.run_id);
+    if (historyItem.data_path) {
+      setDataPath(historyItem.data_path);
+    }
+    setScripts([]);
+    setDataArtifacts([]);
+    setScriptIndex(0);
+    setDataIndex(0);
   };
 
   const fetchArtifact = async (path: string, setter: (val: string) => void) => {
@@ -264,25 +299,44 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-50 text-gray-900 font-sans">
       {/* Left Sidebar */}
-      <div className="w-64 bg-gray-100 border-r border-gray-200 p-4 flex flex-col z-20">
-        <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <MessageSquare size={20} /> Chats
-        </h2>
-        <div className="flex-1 overflow-y-auto space-y-2">
-          {runs.map((r) => (
-            <div key={r.runId} className="p-3 bg-white rounded-lg shadow-sm border border-gray-200 cursor-pointer text-sm font-medium hover:bg-gray-50 transition truncate">
-              {r.query}
-            </div>
-          ))}
+      {isLeftSidebarOpen && (
+        <div className="w-64 bg-gray-100 border-r border-gray-200 p-4 flex flex-col z-20 shrink-0">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <MessageSquare size={20} /> History
+            </h2>
+            <button onClick={() => setIsLeftSidebarOpen(false)} className="text-gray-500 hover:text-gray-800 p-1">
+              <ChevronLeft size={20} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2">
+            {historyRuns.map((r) => (
+              <div 
+                key={r.run_id} 
+                onClick={() => loadHistoryRun(r)}
+                className={`p-3 bg-white rounded-lg shadow-sm border ${currentRunId === r.run_id ? 'border-emerald-500 ring-1 ring-emerald-500' : 'border-gray-200'} cursor-pointer hover:bg-gray-50 transition`}
+              >
+                <div className="text-sm font-medium text-gray-800 truncate">{r.query}</div>
+                <div className="text-[10px] text-gray-400 mt-1">{new Date(r.timestamp * 1000).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
         <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 p-4 flex justify-between items-center z-10 sticky top-0">
-          <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <Bot className="text-emerald-600" /> Agentic Data Analyst
-          </h1>
+          <div className="flex items-center gap-3">
+            {!isLeftSidebarOpen && (
+              <button onClick={() => setIsLeftSidebarOpen(true)} className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
+                <MessageSquare size={20} />
+              </button>
+            )}
+            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Bot className="text-emerald-600" /> Agentic Data Analyst
+            </h1>
+          </div>
           <div className="flex items-center gap-4">
             <label className="cursor-pointer bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-50 transition flex items-center gap-2 text-sm font-medium shadow-sm">
               <Upload size={16} className="text-emerald-600" /> {file ? file.name : "Upload Dataset"}
@@ -470,11 +524,10 @@ export default function App() {
                                 {run.insights.length > 0 && run.insights.map((ins, idx) => {
                                    const chartsToRender = chartsEntries.filter(([key, opt]) => {
                                      if (renderedCharts.has(key)) return false;
-                                     const supported = Array.isArray(opt.supported_insights) ? opt.supported_insights : [];
-                                     const lastSupportedInsight = supported.map((sId: string) => run.insights.findIndex(i => i.insight_id === sId || (i.insight_id && sId.includes(i.insight_id))))
-                                                                           .filter((i: number) => i !== -1)
-                                                                           .sort((a: number, b: number) => b - a)[0];
-                                     return lastSupportedInsight === idx;
+                                      const supportedIds = Array.isArray(opt.supported_insights_id) 
+                                        ? opt.supported_insights_id 
+                                        : (Array.isArray(opt.supported_insights) ? opt.supported_insights : []);
+                                      return supportedIds.includes(ins.insight_id) || (ins.insight_id && supportedIds.some((sId: string) => sId.includes(ins.insight_id)));
                                    });
                                    
                                    chartsToRender.forEach(([key]) => renderedCharts.add(key));

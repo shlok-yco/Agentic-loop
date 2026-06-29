@@ -146,7 +146,9 @@ Specify only for strictly relevant columns:
 * Reason
 
 ## Feature Engineering
-CRITICAL: ONLY recommend new features if they are absolutely necessary to answer the business objective. Do not invent features just to be thorough.
+CRITICAL: ONLY recommend new features if they are absolutely mathematically necessary to answer the business objective. Do not invent features just to be thorough.
+WARNING: Recommending feature engineering, custom transformations, or any non-standard aggregations TRIGGERS A SLOW CUSTOM PYTHON SCRIPT GENERATION that takes 15+ minutes. You MUST avoid this at all costs.
+If the raw data is sufficient, or if simple aggregations are enough, you MUST leave the `feature_engineering` list completely empty: `[]`. Do not recommend dummy features or placeholder calculations.
 For every necessary feature include:
 * New column
 * Formula
@@ -238,6 +240,11 @@ Ignore:
 * Obvious findings
 * Trivial statistics
 * Low-confidence observations
+* Redundant or paraphrased insights
+
+CRITICAL: Do NOT generate redundant or paraphrased insights (e.g. "Insight 1: X > Y" and "Insight 2: Y < X"). Ensure each insight is distinct, mutually exclusive, and offers a unique perspective.
+
+
 
 ---
 
@@ -315,42 +322,342 @@ Never create visualizations without analytical justification.
 
 # CHART SELECTION FRAMEWORK
 
-Select chart types based on communication effectiveness.
+Select visualization types based on the business question, not the data itself.
 
-Examples:
+---
 
-Trend Analysis:
+# 1. Trend / Time Series
 
-* Line Chart
+Best for showing change over time.
 
-Comparison:
+Preferred:
+- Line Chart
+- Area Chart
+- Stacked Area Chart
+- Step Line Chart
 
-* Bar Chart
+Alternative:
+- Spline Line
+- Stream Graph
+- Calendar Heatmap
+- Timeline
 
-Ranking:
+Avoid:
+- Pie Charts
 
-* Sorted Bar Chart
+---
 
-Distribution:
+# 2. Comparison
 
-* Histogram
-* Box Plot
+Compare values across categories.
 
-Relationship:
+Preferred:
+- Vertical Bar Chart
+- Horizontal Bar Chart
 
-* Scatter Plot
+Alternative:
+- Lollipop Chart
+- Dot Plot
+- Grouped Bar Chart
+- Bullet Chart
 
-Composition:
+Avoid:
+- Pie Charts for many categories
 
-* Stacked Bar
-* Treemap
+---
 
-Part-to-Whole:
+# 3. Ranking
 
-* Donut Chart (only when appropriate)
+Show ordered values.
 
-Avoid chart types that reduce interpretability.
+Preferred:
+- Sorted Horizontal Bar
+- Sorted Vertical Bar
 
+Alternative:
+- Lollipop Chart
+- Dot Plot
+
+---
+
+# 4. Distribution
+
+Understand spread and variability.
+
+Preferred:
+- Histogram
+- Box Plot
+
+Alternative:
+- Violin Plot (custom)
+- Density Curve
+- Strip Plot
+- Beeswarm Plot
+- Ridgeline Plot (custom)
+
+---
+
+# 5. Relationship / Correlation
+
+Study relationships between variables.
+
+Preferred:
+- Scatter Plot
+
+Alternative:
+- Bubble Chart
+- Hexbin Plot
+- Regression Scatter
+- Contour Plot
+- Pair Plot (multiple charts)
+
+---
+
+# 6. Composition
+
+Understand how categories contribute.
+
+Preferred:
+- Stacked Bar
+- Stacked Area
+
+Alternative:
+- Treemap
+- Sunburst
+- Sankey
+- Mosaic Plot
+
+Avoid:
+- Pie Chart with many categories
+
+---
+
+# 7. Part-to-Whole
+
+Show proportions.
+
+Preferred:
+- Donut Chart (<=6 categories)
+- Pie Chart (<=5 categories)
+
+Alternative:
+- Treemap
+- Waffle Chart
+- Stacked Bar (100%)
+
+Avoid:
+- 3D Pie Charts
+
+---
+
+# 8. Geographic Analysis
+
+Visualize spatial information.
+
+Preferred:
+- Choropleth Map
+- Symbol Map
+
+Alternative:
+- Heat Map
+- Flow Map
+- Geo Scatter
+- Lines Map
+
+---
+
+# 9. Hierarchy
+
+Represent nested structures.
+
+Preferred:
+- Treemap
+- Sunburst
+
+Alternative:
+- Tree Diagram
+- Circle Packing
+
+---
+
+# 10. Flow / Movement
+
+Show movement or transfer.
+
+Preferred:
+- Sankey Diagram
+
+Alternative:
+- Chord Diagram
+- Parallel Sets
+- Network Graph
+- Flow Map
+
+---
+
+# 11. Network Analysis
+
+Display relationships between entities.
+
+Preferred:
+- Force Directed Graph
+
+Alternative:
+- Circular Network
+- Dependency Graph
+- Chord Diagram
+
+---
+
+# 12. Multivariate Analysis
+
+Visualize many dimensions simultaneously.
+
+Preferred:
+- Parallel Coordinates
+
+Alternative:
+- Radar Chart
+- Bubble Chart
+- Heatmap
+- Pairwise Scatter Matrix
+
+---
+
+# 13. Matrix / Intensity
+
+Show values across two dimensions.
+
+Preferred:
+- Heatmap
+
+Alternative:
+- Calendar Heatmap
+- Confusion Matrix
+- Correlation Matrix
+
+---
+
+# 14. Financial
+
+Specialized financial charts.
+
+Preferred:
+- Candlestick Chart
+
+Alternative:
+- OHLC Chart
+- Volume Chart
+
+---
+
+# 15. Scheduling / Timeline
+
+Display events over time.
+
+Preferred:
+- Timeline
+- Gantt Chart (custom)
+
+Alternative:
+- Calendar View
+
+---
+
+# 16. Process Analysis
+
+Show sequential processes.
+
+Preferred:
+- Sankey Diagram
+
+Alternative:
+- Funnel Chart
+- Flow Diagram
+- Pipeline Chart
+
+---
+
+# 17. Funnel / Conversion
+
+Show stage-wise drop-offs.
+
+Preferred:
+- Funnel Chart
+
+Alternative:
+- Pyramid Chart
+
+---
+
+# 18. Circular Comparison
+
+Compare multiple metrics.
+
+Preferred:
+- Radar Chart
+
+Alternative:
+- Polar Bar Chart
+- Polar Line Chart
+
+---
+
+# 19. Density
+
+Show concentration of observations.
+
+Preferred:
+- Heatmap
+- Hexbin Plot
+
+Alternative:
+- Density Contour
+- KDE Plot
+
+---
+
+# 20. Uncertainty
+
+Represent confidence or variability.
+
+Preferred:
+- Error Bar Chart
+
+Alternative:
+- Confidence Band
+- Range Area Chart
+
+---
+
+# General Selection Rules
+
+Use:
+
+- Line → time trends
+- Area → cumulative trends
+- Bar → category comparison
+- Sorted Bar → rankings
+- Histogram → frequency distribution
+- Box Plot → variability and outliers
+- Scatter → relationships
+- Bubble → relationships with third variable
+- Heatmap → intensity matrices
+- Treemap → hierarchical composition, breakdown
+- Sunburst → hierarchical proportions
+- Sankey → flow between stages
+- Funnel → conversion pipelines
+- Radar → multivariate profiles (domain: sports, finances, etc)
+- Parallel Coordinates → high-dimensional comparisons
+- Candlestick → financial time series
+- Calendar Heatmap → daily activity patterns
+- Network Graph → entity relationships
+- Geo Map → spatial distributions
+
+Avoid chart types that reduce interpretability (3D charts, excessive pie slices, unnecessary dual axes, decorative effects).
+Be very precise on the chart selection, rather than selecting multiple charts.
+If multiple insights were supported by same chart then don't generate multiple charts.
+Also, if there can be variants and do generate variants to support the insights.
 ---
 
 # VISUALIZATION DESIGN REQUIREMENTS
@@ -358,17 +665,21 @@ Avoid chart types that reduce interpretability.
 For every visualization provide:
 
 * Title
-* Supported insights (List the insight_ids, e.g., ["INS_001"])
-* Supported objectives (List the objective_ids, e.g., ["OBJ_001"])
+* Supported insights (List the full text of the insights, NOT the IDs)
+* Supported business objectives (List the full text of the business objectives, NOT the IDs)
 * Priority
-* Variations: An array of highly accurate chart options for this insight. You can provide multiple variations of a chart for a single insight if it is helpful (e.g., a Bar chart and a Pie chart for the same data). Do not generate too many visualization groups, just give the most accurate ones.
+* Variations (A list of different chart variations for this visualization)
+  For each variation provide:
+  * Chart Type
+  * Reasoning (Be clear why you chose that chart type in the first place. Use a user-understandable and clear explanation)
+  * Expected takeaway (User-understandable summary, insights, and takeaways)
+  * ECharts Option
 
-For each variation explain:
-
-* Chart Type
-* Reasoning (Be clear why you chose that chart type in the first place. Use a user-understandable and clear explanation)
-* Expected takeaway (User-understandable summary, insights, and takeaways)
-* What business question it answers
+# QUALITY RULES
+* Make sure to use margin parameters so that no text in any part of the graph gets overlapped
+* No text should be cut off or hidden
+* The graph should be fully visible and readable
+* No overlapping elements
 
 NEVER mention the IDs inside the reasoning, takeaway, or summary. Just write a user-understandable and clear reasoning, summary, insights, and takeaways.
 
@@ -386,8 +697,11 @@ Requirements:
 * Consistent with insight narrative
 * ECharts Formatting RULES:
   1. DO NOT use Javascript function strings (e.g., "formatter": "function(value){...}") anywhere in the JSON options (e.g. tooltip, axisLabel, label). The frontend renders the raw string.
-  2. Use standard ECharts template strings instead. For example: "formatter": "${value}" or "formatter": "{c}".
-  3. Do NOT hardcode '$' unless the metric is explicitly currency/USD. Handle units dynamically.
+  2. Use standard ECharts template strings instead.
+  3. CRITICAL for `dataset` with objects: If your `dataset.source` is an array of objects, using `{c}` in a label or tooltip formatter will render as `[object Object]`. You MUST use `{@dimensionName}` syntax instead to reference the specific column/key (e.g., `"formatter": "{@High}%"`, `"formatter": "{@revenue}"`).
+  4. Do NOT hardcode '$' unless the metric is explicitly currency/USD. Handle units dynamically.
+  5. CRITICAL: Add generous margins to the grid object so that long labels and legends are fully visible and do not get cut off. Example: `"grid": { "containLabel": true, "left": "5%", "right": "8%", "bottom": "15%", "top": "15%" }`.
+  6. Prevent label overlap in pie/donut charts and axis labels by using properties like `hideOverlap: true`, `overflow: "break"`, or rotating labels `rotate: 45`.
 
 Do not generate placeholder configurations.
 
