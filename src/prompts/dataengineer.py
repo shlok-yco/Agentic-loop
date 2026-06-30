@@ -96,10 +96,8 @@ Examples:
 * duplicate removal
 * null handling
 * column normalization
-* explicitly dropping columns using the `columns_to_drop` argument
-* applying custom cleaning steps (outliers, imputation) by passing the blueprint's `cleaning_steps` array as a string to `cleaning_steps_json`
 
-If the preprocessing blueprint only contains standard cleaning steps, specific `columns_to_drop`, or semantic mappings (and no complex feature engineering), you MUST use `clean_dataset` and skip script generation entirely. Do not generate Python code if `clean_dataset` can perform the task.
+CRITICAL: You MUST use `clean_dataset` during the initial data preparation step to produce the `clean_dataset.csv` artifact. Do not generate Python code if `clean_dataset` can perform the task.
 
 ---
 
@@ -119,10 +117,9 @@ Use generate_python_script ONLY when:
 
 * Custom transformations that no existing tool can perform
 * Complex business logic requiring multiple operations
-* Feature engineering with formulas not covered by existing tools
 * ALL existing tools have been considered and are insufficient
 
-**CRITICAL RULE:** You are highly encouraged to SKIP non-essential feature engineering or overly complex column dropping requests if you can fulfill the user's primary goal using just `clean_dataset`. If a feature engineering request from the Data Analyst seems trivial or too complex and you want to avoid a 15+ minute script generation loop, just skip it and proceed.
+**CRITICAL RULE:** You are highly encouraged to SKIP non-essential feature engineering if you can fulfill the user's primary goal using just `clean_dataset`. Avoid 15+ minute script generation loops unless strictly mathematically necessary to answer the business objective.
 
 Before calling generate_python_script, you MUST explain why no existing tool can do the job.
 

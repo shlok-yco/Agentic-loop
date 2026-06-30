@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactECharts from "echarts-for-react";
-import { MessageSquare, Upload, Play, Terminal, Database, Loader2, Bot, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, Upload, Play, Terminal, Database, Loader2, Bot, FileText, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -35,6 +35,7 @@ interface ChatRun {
 
 function ChartGroup({ opt }: { opt: any }) {
   const [variationIndex, setVariationIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   const variations = opt.variations || [opt];
   const currentVariation = variations[variationIndex];
@@ -48,16 +49,34 @@ function ChartGroup({ opt }: { opt: any }) {
     <div className="flex flex-col mb-8 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-md">
       <div className="bg-gray-50 p-3 border-b border-gray-200 flex items-center justify-between">
         <h3 className="font-bold text-gray-800 text-sm">{title || "Visualization"}</h3>
-        {variations.length > 1 && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => setVariationIndex(prev => Math.max(0, prev - 1))} disabled={variationIndex === 0} className="p-1 hover:bg-gray-200 rounded disabled:opacity-50">&lt;</button>
-            <span className="text-xs text-gray-500">{variationIndex + 1}/{variations.length}</span>
-            <button onClick={() => setVariationIndex(prev => Math.min(variations.length - 1, prev + 1))} disabled={variationIndex === variations.length - 1} className="p-1 hover:bg-gray-200 rounded disabled:opacity-50">&gt;</button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+          <button 
+            onClick={() => setVariationIndex(prev => Math.max(0, prev - 1))} 
+            disabled={variationIndex === 0} 
+            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-xs font-semibold text-gray-600 px-2 min-w-[2.5rem] text-center">
+            {variationIndex + 1} / {variations.length}
+          </span>
+          <button 
+            onClick={() => setVariationIndex(prev => Math.min(variations.length - 1, prev + 1))} 
+            disabled={variationIndex === variations.length - 1} 
+            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-emerald-600 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
       <div className="p-6">
-        <div className="h-80 md:h-96 w-full mb-6 border border-gray-100 rounded-xl p-2 bg-white shadow-inner">
+        <div 
+          className="h-80 md:h-96 w-full mb-6 border border-gray-100 rounded-xl p-2 bg-white shadow-inner cursor-pointer group relative"
+          onClick={() => setIsLightboxOpen(true)}
+        >
+          <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-xl flex items-center justify-center pointer-events-none">
+            <span className="bg-white/90 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold shadow-sm backdrop-blur-sm">Click to expand</span>
+          </div>
           <ReactECharts option={echartsOption} notMerge={true} style={{ height: '100%', width: '100%' }} />
         </div>
         <div className="text-sm text-gray-800 space-y-4 bg-emerald-50/30 p-5 rounded-xl border border-emerald-100">
@@ -84,6 +103,21 @@ function ChartGroup({ opt }: { opt: any }) {
           )}
         </div>
       </div>
+      {isLightboxOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 md:p-8 backdrop-blur-sm">
+          <div className="bg-white w-full h-full rounded-2xl relative flex flex-col shadow-2xl">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(false); }}
+              className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-red-100 hover:text-red-600 rounded-full z-10 transition-colors shadow-sm text-gray-700"
+            >
+              <X size={24} />
+            </button>
+            <div className="flex-1 p-2 md:p-8 w-full h-full">
+              <ReactECharts option={echartsOption} notMerge={true} style={{ height: '100%', width: '100%' }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -521,13 +555,18 @@ export default function App() {
 
                             return (
                               <>
-                                {run.insights.length > 0 && run.insights.map((ins, idx) => {
+                                {run.insights.length > 0 && [...run.insights].sort((a, b) => {
+                                   const pA = a.priority !== undefined ? a.priority : 999;
+                                   const pB = b.priority !== undefined ? b.priority : 999;
+                                   return pA - pB;
+                                }).map((ins, idx) => {
                                    const chartsToRender = chartsEntries.filter(([key, opt]) => {
                                      if (renderedCharts.has(key)) return false;
                                       const supportedIds = Array.isArray(opt.supported_insights_id) 
                                         ? opt.supported_insights_id 
                                         : (Array.isArray(opt.supported_insights) ? opt.supported_insights : []);
-                                      return supportedIds.includes(ins.insight_id) || (ins.insight_id && supportedIds.some((sId: string) => sId.includes(ins.insight_id)));
+                                      const idToMatch = ins.insight_id || ins.insight;
+                                      return idToMatch && (supportedIds.includes(idToMatch) || supportedIds.some((sId: string) => sId.includes(idToMatch)));
                                    });
                                    
                                    chartsToRender.forEach(([key]) => renderedCharts.add(key));
@@ -543,8 +582,8 @@ export default function App() {
                                        )}
                                        <div className="space-y-4 mb-4 pb-4 border-b border-gray-100">
                                          <div className="prose text-sm md:text-base text-gray-800">
-                                           <h4 className="font-bold text-lg mb-2 text-gray-900">{ins.title}</h4>
-                                           <p className="leading-relaxed">{ins.finding}</p>
+                                           <h4 className="font-bold text-lg mb-2 text-gray-900">{ins.title || "Key Insight"}</h4>
+                                           <p className="leading-relaxed">{ins.finding || ins.insight}</p>
                                            {ins.recommendation && (
                                              <div className="mt-3 bg-emerald-50 text-emerald-800 p-3 rounded-lg text-sm border border-emerald-100">
                                                <strong className="block mb-1">Recommendation:</strong> {ins.recommendation}
@@ -556,13 +595,13 @@ export default function App() {
                                    );
                                 })}
                                 
-                                {chartsEntries.filter(([key]) => !renderedCharts.has(key)).length > 0 && (
-                                   <div className="grid grid-cols-1 gap-8 mt-8">
-                                     {chartsEntries.filter(([key]) => !renderedCharts.has(key)).map(([key, opt]) => (
-                                        <ChartGroup key={key} opt={opt} />
-                                     ))}
-                                   </div>
-                                )}
+                                 {chartsEntries.filter(([key]) => !renderedCharts.has(key)).length > 0 && (
+                                    <div className="grid grid-cols-1 gap-8 mb-8">
+                                      {chartsEntries.filter(([key]) => !renderedCharts.has(key)).map(([key, opt]) => (
+                                         <ChartGroup key={key} opt={opt} />
+                                      ))}
+                                    </div>
+                                 )}
                               </>
                             );
                          })()}

@@ -163,12 +163,48 @@ def get_run_status(run_id: str):
     try:
         config = {"configurable": {"thread_id": run_id}}
         snapshot = app_graph.get_state(config)
-        if snapshot is None:
-            raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
-        state = snapshot.values
+        
+        workspace_dir = Path("workspace") / run_id
+        disk_completed = False
+        if workspace_dir.exists():
+            if (workspace_dir / "output" / "approved_visualizations.json").exists() or (workspace_dir / "output" / "approved_visualizations").exists():
+                disk_completed = True
+
+        state = getattr(snapshot, "values", {}) if snapshot else {}
+        
+        if not state:
+            if not workspace_dir.exists():
+                raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+            
+            current_step = "COMPLETED" if disk_completed else "UNKNOWN"
+            
+            live_logs = []
+            live_logs_path = workspace_dir / "live_logs.json"
+            if live_logs_path.exists():
+                try:
+                    live_logs = json.loads(live_logs_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            
+            return {
+                "run_id": run_id,
+                "pipeline_stage": current_step,
+                "active_division": None,
+                "qa_retry_counts": {},
+                "artifact_paths": {},
+                "log_entries": len(live_logs),
+                "project_log": live_logs,
+            }
+        
+        # Check if graph has finished executing
+        is_finished = len(getattr(snapshot, "next", [])) == 0
+        current_step = state.get("current_step")
+        if is_finished or disk_completed:
+            current_step = "COMPLETED"
+
         supervisor_logs = state.get("project_log") or []
         live_logs = []
-        live_logs_path = Path(f"workspace/{run_id}/live_logs.json")
+        live_logs_path = workspace_dir / "live_logs.json"
         if live_logs_path.exists():
             try:
                 live_logs = json.loads(live_logs_path.read_text(encoding="utf-8"))
@@ -179,9 +215,9 @@ def get_run_status(run_id: str):
 
         return {
             "run_id": run_id,
-            "pipeline_stage": state.get("current_step"),
+            "pipeline_stage": current_step,
             "active_division": state.get("active_division"),
-            "qa_retry_counts": state.get("qa_retry_counts"),
+            "qa_retry_counts": state.get("qa_retry_counts", {}),
             "artifact_paths": state.get("output_artifacts") or {},
             "log_entries": len(project_log),
             "project_log": project_log,
@@ -200,23 +236,66 @@ def get_run_result(run_id: str):
     try:
         config = {"configurable": {"thread_id": run_id}}
         snapshot = app_graph.get_state(config)
-        if snapshot is None:
+        
+        workspace_dir = Path("workspace") / run_id
+        if not workspace_dir.exists():
             raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
-        final_state = snapshot.values
+            
+        final_state = getattr(snapshot, "values", {}) if snapshot else {}
+        
+        if not final_state or not final_state.get("output_artifacts") or not final_state.get("project_log"):
+            # Fully reconstruct from disk if state is empty or incomplete
+            final_state = {
+                "current_step": "COMPLETED",
+                "active_division": None,
+                "intent_class": None,
+                "error_state": None,
+                "project_log": [],
+                "output_artifacts": {}
+            }
+            
+            output_dir = workspace_dir / "output"
+            if output_dir.exists():
+                for f in output_dir.iterdir():
+                    if f.is_file():
+                        final_state["output_artifacts"][f.name] = str(f.resolve())
+                        if f.name == "approved_visualizations.json":
+                            final_state["approved_visualizations"] = {"path": str(f.resolve())}
+                        if f.name == "approved_insights.json":
+                            final_state["approved_insights"] = {"path": str(f.resolve())}
+            
+            live_logs_path = workspace_dir / "live_logs.json"
+            if live_logs_path.exists():
+                try:
+                    final_state["project_log"] = json.loads(live_logs_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+        else:
+            # Even if we have some state, inject the output directory artifacts just in case
+            output_dir = workspace_dir / "output"
+            if "output_artifacts" not in final_state:
+                final_state["output_artifacts"] = {}
+            if output_dir.exists():
+                for f in output_dir.iterdir():
+                    if f.is_file():
+                        if f.name not in final_state["output_artifacts"]:
+                            final_state["output_artifacts"][f.name] = str(f.resolve())
+                        if f.name == "approved_visualizations.json" and "approved_visualizations" not in final_state:
+                            final_state["approved_visualizations"] = {"path": str(f.resolve())}
+                        if f.name == "approved_insights.json" and "approved_insights" not in final_state:
+                            final_state["approved_insights"] = {"path": str(f.resolve())}
 
         artifact_paths = final_state.get("output_artifacts", {})
         echarts_options = {}
-        for key, val in artifact_paths.items():
-            if key.startswith("echarts_") or "echarts" in key:
-                try:
-                    p = Path(val)
-                    if p.exists():
-                        content = p.read_text(encoding="utf-8")
-                        echarts_options[key.replace("echarts_", "")] = json.loads(content)
-                except Exception:
-                    pass
-
+        
+        # Only parse charts from the official approved_visualizations artifact.
+        # Check both state and output_artifacts for the path.
         approved_viz = final_state.get("approved_visualizations", {})
+        approved_viz_path = artifact_paths.get("approved_visualizations") or artifact_paths.get("approved_visualizations.json")
+        
+        if not approved_viz and approved_viz_path:
+            approved_viz = {"path": approved_viz_path}
+
         if isinstance(approved_viz, dict) and "path" in approved_viz:
             try:
                 p = Path(approved_viz["path"])
@@ -225,11 +304,44 @@ def get_run_result(run_id: str):
             except Exception:
                 pass
 
+        viz_list = []
         if isinstance(approved_viz, dict) and "visualizations" in approved_viz:
-            for i, viz in enumerate(approved_viz["visualizations"]):
+            viz_list = approved_viz["visualizations"]
+        elif isinstance(approved_viz, list):
+            viz_list = approved_viz
+
+        for i, viz in enumerate(viz_list):
+            if isinstance(viz, dict):
                 viz_id = viz.get("title", f"viz_{i}")
-                if "variations" in viz:
+                if "variations" in viz or "echarts_option" in viz:
                     echarts_options[viz_id] = viz
+        
+        # Fallback and $ref resolution: also load any individual echarts artifacts
+        for key, path in artifact_paths.items():
+            if key.startswith("echarts_"):
+                try:
+                    p = Path(path)
+                    if p.exists():
+                        loaded_viz = json.loads(p.read_text(encoding="utf-8"))
+                        if isinstance(loaded_viz, dict):
+                            viz_id = loaded_viz.get("title", key)
+                            actual_opt = loaded_viz.get("echarts_option", loaded_viz)
+                            
+                            if viz_id in echarts_options:
+                                # It's already here from approved_visualizations; let's resolve $refs
+                                for var in echarts_options[viz_id].get("variations", []):
+                                    ref_obj = var.get("echarts_option", {})
+                                    if isinstance(ref_obj, dict) and "$ref" in ref_obj:
+                                        if ref_obj["$ref"] == key or ref_obj["$ref"] == p.name:
+                                            var["echarts_option"] = actual_opt
+                                    # also if echarts_option is completely missing, populate it
+                                    elif not ref_obj:
+                                        var["echarts_option"] = actual_opt
+                            else:
+                                if "echarts_option" in loaded_viz or "variations" in loaded_viz:
+                                    echarts_options[viz_id] = loaded_viz
+                except Exception:
+                    pass
 
         approved_insights_data = final_state.get("approved_insights", {})
         if isinstance(approved_insights_data, dict) and "path" in approved_insights_data:
@@ -240,7 +352,12 @@ def get_run_result(run_id: str):
             except Exception:
                 pass
 
-        insights = approved_insights_data.get("insights", []) if isinstance(approved_insights_data, dict) else []
+        if isinstance(approved_insights_data, list):
+            insights = approved_insights_data
+        elif isinstance(approved_insights_data, dict):
+            insights = approved_insights_data.get("insights", [])
+        else:
+            insights = []
 
         return RunResponse(
             run_id=run_id,

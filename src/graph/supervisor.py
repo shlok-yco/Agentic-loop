@@ -37,35 +37,25 @@ MAX_SUPERVISOR_MESSAGES = 16
 # Maps artifact keys (as they appear in generated_artifacts) to the step
 # that should be considered complete when they exist.
 ARTIFACT_STEP_MAP = {
-    "data_profile": "data_ingestion",
-    "data_profile.json": "data_ingestion",
-    "data_summary": "data_ingestion",
-    "data_summary.json": "data_ingestion",
-    "business_objectives": "business_objectives",
-    "business_objectives.json": "business_objectives",
-    "preprocessing_blueprint": "preprocessing_blueprint",
-    "preprocessing_blueprint.json": "preprocessing_blueprint",
-    "clean_dataset": "execute_preprocessing",
-    "clean_dataset.csv": "execute_preprocessing",
-    "semantic_metadata": "execute_preprocessing",
-    "semantic_metadata.json": "execute_preprocessing",
-    "aggregation_results": "execute_preprocessing",
-    "aggregation_results.json": "execute_preprocessing",
-    "approved_insights": "generate_insights",
-    "approved_insights.json": "generate_insights",
-    "approved_visualizations": "generate_visualizations",
-    "approved_visualizations.json": "generate_visualizations",
+    "data_profile": "data_preparation",
+    "data_profile.json": "data_preparation",
+    "data_summary": "data_preparation",
+    "data_summary.json": "data_preparation",
+    "clean_dataset": "data_preparation",
+    "clean_dataset.csv": "data_preparation",
+    "business_objectives": "analytics_and_visualization",
+    "business_objectives.json": "analytics_and_visualization",
+    "approved_insights": "analytics_and_visualization",
+    "approved_insights.json": "analytics_and_visualization",
+    "approved_visualizations": "analytics_and_visualization",
+    "approved_visualizations.json": "analytics_and_visualization",
 }
 
 # Ordered list of steps for progression
 STEP_ORDER = [
     "init",
-    "data_ingestion",
-    "business_objectives",
-    "preprocessing_blueprint",
-    "execute_preprocessing",
-    "generate_insights",
-    "generate_visualizations",
+    "data_preparation",
+    "analytics_and_visualization",
     "visualization_completed",
 ]
 
@@ -340,12 +330,8 @@ class SupervisorState(TypedDict):
 
     current_step: Literal[
         "init",
-        "data_ingestion",
-        "business_objectives",
-        "preprocessing_blueprint",
-        "execute_preprocessing",
-        "generate_insights",
-        "generate_visualizations",
+        "data_preparation",
+        "analytics_and_visualization",
         "visualization_completed",
     ]
 
@@ -443,7 +429,7 @@ async def Supervisor(state: SupervisorState) -> SupervisorState:
             
             if isinstance(parsed, dict) and "tasks" in parsed:
                 import uuid
-                tool_name = "lead_data_engineer" if current_step in ["init", "preprocessing_blueprint"] else "lead_analyst"
+                tool_name = "lead_data_engineer" if current_step in ["init", "data_preparation"] else "lead_analyst"
                 
                 tool_call = {
                     "name": tool_name,
@@ -551,7 +537,7 @@ def update_project_state(state: SupervisorState):
     current_step = new_step
 
     # Check if we've reached the final visualization step
-    project_complete = current_step == "generate_visualizations" and (
+    project_complete = current_step == "analytics_and_visualization" and (
         "approved_visualizations" in valid_artifacts_keys
         or "approved_visualizations.json" in valid_artifacts_keys
         or any("approved_visualizations" in k for k in valid_artifacts_keys)
