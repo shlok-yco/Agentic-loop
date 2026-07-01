@@ -277,6 +277,8 @@ Never create visualizations without analytical justification.
 
 Select visualization types based on the business question, not the data itself.
 CRITICAL: DIVERSIFY CHART TYPES. Do NOT default to bar charts for everything. You MUST use a wide variety of chart types (e.g., Line, Scatter, Bubble, Radar, Heatmap, Sunburst, Treemap, Funnel, Area, Pie) across your report to keep the visual storytelling engaging. Excessive use of Bar Charts is strictly prohibited and will result in failure.
+CRITICAL: If the user's query asks about cities, states, regions, locations, or geographical patterns, AND the provided dataset contains geographic and location dimensions (location, geo data, state, cities, regions, country), you MUST explicitly select and generate a Choropleth Map. You must independently deduce if a Choropleth map is appropriate based on the availability of such location/geo data.
+
 
 ---
 
@@ -408,10 +410,10 @@ Avoid:
 
 # 8. Geographic Analysis
 
-Visualize spatial information.
+Visualize spatial information. CRITICAL: If the query is related to cities, states, regions, geography, or locations, AND the dataset has geographic data available, you MUST prioritize and use a Choropleth Map.
 
 Preferred:
-- Choropleth Map
+- Choropleth Map (CRITICAL: When generating a Choropleth Map, set `type: "map"`. For the `map` property, specify the exact country name in lowercase (e.g., `map: "france"`, `map: "japan"`). If it is US-specific, use `map: "usa"`. If it spans multiple countries globally, use `map: "world"`.)
 - Symbol Map
 
 Alternative:

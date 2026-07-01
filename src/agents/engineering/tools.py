@@ -421,6 +421,23 @@ def submit_engineer_report(
     Submit final engineering report.
     """
 
+    if response_data is not None:
+        try:
+            # Try to strip markdown fences
+            resp_str = response_data.strip()
+            if resp_str.startswith("```json"):
+                resp_str = resp_str[7:]
+            if resp_str.startswith("```"):
+                resp_str = resp_str[3:]
+            if resp_str.endswith("```"):
+                resp_str = resp_str[:-3]
+            json.loads(resp_str.strip())
+        except json.JSONDecodeError as e:
+            return json.dumps({
+                "status": "ERROR",
+                "message": f"Validation Failed: `response_data` is not valid JSON. JSONDecodeError: {e}. Please fix the JSON formatting (e.g., remove trailing commas, fix quotes) before submitting the report."
+            })
+
     return json.dumps(
         {
             "report_type": "DIVISION_REPORT",

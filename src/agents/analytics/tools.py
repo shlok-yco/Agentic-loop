@@ -108,13 +108,9 @@ def write_artifact(
             "artifact_path": str(p),
         })
     except json.JSONDecodeError as e:
-        # If the content is not valid JSON, write it as raw text
-        p.write_text(artifact_content, encoding="utf-8")
         return json.dumps({
-            "status": "ok",
-            "artifact_type": artifact_type,
-            "artifact_path": str(p),
-            "warning": f"Content was not valid JSON: {e}. Saved as raw text.",
+            "status": "ERROR",
+            "message": f"Validation Failed: Content was not valid JSON. JSONDecodeError: {e}. Please fix the JSON formatting (e.g., remove trailing commas, fix quotes) and try again.",
         })
     except Exception as e:
         return json.dumps({"status": "ERROR", "message": str(e)})
@@ -326,6 +322,23 @@ def submit_analyst_report(
         failed_tasks: List of task descriptions that failed.
         response_data: A JSON string containing exactly the schema requested by the supervisor's response_format.
     """
+
+    if response_data is not None:
+        try:
+            # Try to strip markdown fences
+            resp_str = response_data.strip()
+            if resp_str.startswith("```json"):
+                resp_str = resp_str[7:]
+            if resp_str.startswith("```"):
+                resp_str = resp_str[3:]
+            if resp_str.endswith("```"):
+                resp_str = resp_str[:-3]
+            json.loads(resp_str.strip())
+        except json.JSONDecodeError as e:
+            return json.dumps({
+                "status": "ERROR",
+                "message": f"Validation Failed: `response_data` is not valid JSON. JSONDecodeError: {e}. Please fix the JSON formatting (e.g., remove trailing commas, fix quotes) before submitting the report."
+            })
 
     return json.dumps(
         {
