@@ -276,6 +276,7 @@ Never create visualizations without analytical justification.
 # CHART SELECTION FRAMEWORK
 
 Select visualization types based on the business question, not the data itself.
+CRITICAL: DIVERSIFY CHART TYPES. Do NOT default to bar charts for everything. You MUST use a wide variety of chart types (e.g., Line, Scatter, Bubble, Radar, Heatmap, Sunburst, Treemap, Funnel, Area, Pie) across your report to keep the visual storytelling engaging. Excessive use of Bar Charts is strictly prohibited and will result in failure.
 
 ---
 
@@ -305,9 +306,10 @@ Avoid:
 Compare values across categories.
 
 Preferred:
-- Vertical Bar Chart
-- Horizontal Bar Chart (always Horizontal if categories >= 7)
 - Radar Chart if comparable sub_categories or metrics are 4-7 and actual categories > 10
+- Bubble Chart (for multi-dimensional comparison)
+- Vertical Bar Chart (Use sparingly to avoid bar chart fatigue)
+- Horizontal Bar Chart (always Horizontal if categories >= 7, but use sparingly)
 
 Alternative:
 - Lollipop Chart (If categories > 7)
